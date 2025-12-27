@@ -1,0 +1,10 @@
+=== ÇİZELGE BAŞLIKLARI DEBUG (ATIF FİLTRELİ) ===
+
+start_idx=343, end_idx=460
+max_words=15
+forbidden_contains=[' ile ', ' olarak ', ' göster', ' değerlendir', ' sunul', ' veril', ' elde edilen']
+
+[381] ÇİZELGE CAPTION: Çizelge 2.1 FDM’lerde tercih edilmesi için istenilen temel özellikler (Sarbu ve Dorca, 2019)
+  Font=Times New Roman, Size=12.0, LS=1.0, Before=12.0, After=0.0, Align=LEFT (0)
+
+=== TARAMA TAMAMLANDI (caption=1) ===

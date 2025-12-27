@@ -1,0 +1,92 @@
+report:
+  cell_colors:
+    fail: FFCCCC
+    pass: CCFFCC
+  margins_cm:
+    bottom: 2.0
+    left: 2.5
+    right: 2.0
+    top: 2.0  # in cm
+  show_datetime: true
+  show_filename: true
+  highlight_failures: true
+  include_summary_block: true
+  info_block: Bu kontrol listesi, OKÜ Lisansüstü Eğitim Enstitüsü Tez Yazım Kılavuzu’na
+    göre hazırlanmıştır. Bu maddeler Lisansüstü Eğitim Enstitüsü personeli tarafından
+    gözden geçirilecek ve tüm maddeler onaylanmadıkça belgeniz kabul edilmeyecektir.
+  order:
+    - general
+    - inner_cover
+    - approval
+    - ethics
+    - abstract_tr
+    - abstract_en
+    # - dedication
+    - acknowledgements
+    - toc
+    - list_of_tables
+    - list_of_figures
+    - symbols_abbreviations
+    - chapter_start     # 
+    - references
+    - appendices
+    - cv
+    # - similarity_report
+  section_titles:
+    general: "GENEL SAYFA DÜZENİ"
+    inner_cover: İÇ KAPAK
+    approval: ONAY SAYFASI
+    ethics: ETİK BEYANI
+    abstract_tr: TÜRKÇE ÖZET
+    abstract_en: İNGİLİZCE ÖZET
+    # dedication: İTHAF
+    acknowledgements: ÖNSÖZ / TEŞEKKÜR
+    toc: İÇİNDEKİLER
+    list_of_figures: ŞEKİLLER DİZİNİ
+    list_of_tables: ÇİZELGELER DİZİNİ
+    symbols_abbreviations: SEMBOLLER VE KISALTMALAR
+    chapter_start: TEZ METNİ       
+    references: KAYNAKLAR  
+    appendices: EKLER    
+    cv: ÖZGEÇMİŞ  
+    # similarity_report: BENZERLİK RAPORU    
+  summary_position: top
+  table_columns:
+    - No#
+    - Kural
+    - Evet
+    - Hayır
+    - Açıklama
+  output_filename: TEZ_KONTROL_RAPORU.docx
+  title:
+    - Osmaniye Korkut Ata Üniversitesi
+    - Lisansüstü Eğitim Enstitüsü Tez Yazım Kuralları Kontrol Listesi
+  title_style:
+    alignment: center
+    bold: true
+    font_name: Times New Roman
+    font_size_pt: 14
+
+  styles:
+    default:
+      font_name: Times New Roman
+      font_size_pt: 10
+      bold: false
+
+    title:
+      font_name: Times New Roman
+      font_size_pt: 24
+      bold: true
+      alignment: center
+
+    info:
+      font_name: Times New Roman
+      font_size_pt: 10
+      bold: false
+      alignment: justify
+
+    meta:
+      font_name: Times New Roman
+      font_size_pt: 10
+      bold: false
+      alignment: left

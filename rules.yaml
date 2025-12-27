@@ -1,0 +1,1050 @@
+# ============================================================
+# OKÜ LEE - Tez Yazım Kuralları
+# ------------------------------------------------------------
+# Bu dosya tez_kontrol.py tarafından okunur.
+# Her bölüm "pages:" altında tanımlanır.
+# Bu program Dr. Öğr. Üyesi Uğur ACAR tarafından yazılmıştır.
+# E-posta:uguracar@hotmail.com, uguracar@osmaniye.edu.tr
+# ============================================================
+
+meta:
+  institute: Osmaniye Korkut Ata Üniversitesi - Lisansüstü Eğitim Enstitüsü
+  language: tr
+  version: 1.0
+
+  # ----------------------------------------------------------
+  #  ÖN SAYFALAR
+  # ----------------------------------------------------------
+
+preliminaries:           # ÖN SAYFALAR
+  enabled: true
+  pages:
+    - inner_cover          # İç Kapak
+    - approval             # Onay Sayfası
+    - ethics
+    - abstract_tr
+    - abstract_en
+    - dedication
+    - acknowledgements
+    - toc
+    - list_of_tables
+    - list_of_figures
+    - symbols_abbreviations
+
+global_settings:
+  prefer_physical_formatting: true
+  unknown_as_pass_if_default_matches: true
+
+
+pages:
+
+  # ----------------------------------------------------------
+  # GENEL SAYFA DÜZENİ
+  # ----------------------------------------------------------
+  general:
+    enabled: true         # Bu bölüm aktif mi?
+    rules:
+      # --- Dikey (portrait) sayfa marjinleri ---
+      - check: margins
+        orientation: portrait   # Dikey sayfa için geçerli
+        top: 2.5                # Üst kenar boşluğu (cm)
+        bottom: 3.0             # Alt kenar boşluğu (cm)
+        left: 4.0               # Sol kenar boşluğu (cm)
+        right: 2.5              # Sağ kenar boşluğu (cm)
+
+      # --- Yatay (landscape) sayfa marjinleri ---
+      - check: margins
+        orientation: landscape  # Yatay sayfa için geçerli
+        top: 4.0                # Üst kenar boşluğu (cm)
+        bottom: 2.5             # Alt kenar boşluğu (cm)
+        left: 2.5               # Sol kenar boşluğu (cm)
+        right: 2.5              # Sağ kenar boşluğu (cm)
+
+      # --- Genel Yazı Tipi  Kontrolü ---
+      - check: font_name_all
+        expected: "Times New Roman"   # 🔑 tüm metin için font kontrolü
+        exceptions:
+          - "Cambria Math"   # Denklemler için izinli fon
+          - "Symbol"
+        preview_words: 6
+
+      # --- Sayfa Boyutu Kontrolü ---
+      - check: paper_size
+        expected: "A4"                # 🔑 kağıt boyutu kontrolü
+    
+      # --- Sayfa Numaraları Kontrolü ---  
+      - check: page_numbers        # ✅ buraya eklendi
+        align: right
+        font:
+          name: Times New Roman
+          size_pt: 12
+        location: footer
+        main_arabic_from: 1
+        no_number_pages:
+        - inner_cover          # İç Kapak
+        - approval
+        - ethics
+        offset_from_bottom_cm: 2.0
+        preliminaries_as_roman: true
+
+     
+  # ----------------------------------------------------------
+  # İÇ KAPAK
+  # ----------------------------------------------------------
+  inner_cover:
+    enabled: true
+    rules:
+      - check: inner_cover_heading_tc
+        description: "İç kapak sayfasındaki 'T.C.' başlığı Times New Roman, 16 punto, 1.0 satır aralığı, önce/sonra 0, ortalı ve kalın olmalı."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: "center"
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ["T.C.", "TC", "T.C"]   # T.C. veya TC olabilir
+        expected_text: "T.C."
+        debug: true
+
+      - check: inner_cover_university_name
+        description: "T.C. satırının hemen altında, boşluk bırakmadan 'OSMANİYE KORKUT ATA ÜNİVERSİTESİ' yazılmalı. Biçim T.C. satırıyla aynı olmalı."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: "center"
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_institute_name
+        description: "Üniversite adı satırının hemen altında, boşluk bırakmadan 'LİSANSÜSTÜ EĞİTİM ENSTİTÜSÜ' yazılmalı. Biçim üniversite adı satırıyla aynı olmalı."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: "center"
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_department_name
+        description: "İç Kapak - Ana Bilim Dalı satırı Times New Roman, 16 punto, 1.0 satır aralığı, ortalı, kalın ve metin 'ANA BİLİM DALI' ile bitmeli."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: "center"
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_spacing_after_department
+        description: "İç Kapak - Ana Bilim Dalı satırından sonra 5–6 satır boşluk olmalı. Her boş satır Times New Roman, 16 punto, kalın, satır aralığı 1.0, önce/sonra 0 olmalıdır."
+        min_blank_lines: 5
+        max_blank_lines: 6
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_thesis_title
+        description: "İç Kapak - Tez başlığı 1–2 satır olabilir. Times New Roman, 16 punto, kalın, ortalı, satır aralığı 1.0, önce/sonra 0 olmalıdır."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        forbid_italic: true
+        debug: true
+
+      - check: inner_cover_spacing_after_title
+        description: "İç Kapak - Tez başlığından sonra 4–5 satır boşluk olmalı. Her boş satır Times New Roman, 16 punto, kalın, satır aralığı 1.0, önce/sonra 0 olmalıdır."
+        min_blank_lines: 4
+        max_blank_lines: 5
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_student_name
+        description: "İç Kapak - Tez başlığından sonraki öğrenci adı satırı. Metin ortalı, Times New Roman, 16 punto, kalın, 1.0 satır aralıklı ve TAMAMI BÜYÜK HARF olmalıdır."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        must_be_uppercase: true
+        debug: true
+
+      - check: inner_cover_post_student_spacing
+        enabled: true
+        description: "Öğrenci adı satırından sonra 7 satır boşluk bulunmalı (Times New Roman, 16 pt, kalın, ortalı, 1.0 satır aralığı)."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_thesis_type
+        description: "Tez türü satırı 'YÜKSEK LİSANS TEZİ' veya 'DOKTORA TEZİ' olmalı (Times New Roman, 16 pt, kalın, ortalı, 1.0 satır aralığı)."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: "center"
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        must_be_uppercase: true
+        debug: true
+
+      - check: inner_cover_post_thesis_type_spacing
+        description: "Tez türü satırından sonra 9 satır boşluk bulunmalı."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        debug: true
+
+      - check: inner_cover_graduation_date
+        description: "Mezuniyet tarihi satırı AY (büyük harf) + 20xx biçiminde olmalı (örnek: HAZİRAN 2025)."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        must_be_uppercase: true
+        debug: true
+
+      - check: inner_cover_city_name
+        description: "İl adı satırı tamamı büyük harf olmalı (OSMANİYE)."
+        font_name: "Times New Roman"
+        font_size_pt: 16
+        bold: false
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        must_be_uppercase: true
+        debug: true
+
+              # --- İç Kapak Tek Sayfa Kontrolü ---  
+      - check: inner_cover_single_page_check
+        description: "İç kapak sayfası tek sayfada olmalı (T.C. ve OSMANİYE aynı sayfada bulunmalı)."
+        section: general
+        debug: true
+        enabled: true
+
+
+
+  # ----------------------------------------------------------
+  # ONAY SAYFASI
+  # ----------------------------------------------------------
+  approval:
+    enabled: true
+    rules:
+    - check: approval_heading
+      text: "TEZ ONAYI"
+      font_name: "Times New Roman"
+      font_size_pt: 12
+      alignment: center
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 24
+      must_be_upper: true
+
+    - check: approval_title_block
+      font_name: "Times New Roman"
+      font_size_pt: 12
+      alignment: center
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 24
+      no_italic: true
+
+    - check: approval_no_line_between_title_and_text
+      description: "TEZ BAŞLIĞI satırından hemen sonra ONAY METNİ gelmeli (arada satır olmamalı)"
+
+    
+    - check: approval_text_block
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+
+    - check: approval_text_spacing
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+
+
+
+    - check: approval_authority_block
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+      expected_lines: 2
+
+
+
+    - check: approval_authority_spacing
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+      expected_lines: 2
+
+
+    - check: approval_authority_spacing_reverse
+      font_name: "Times New Roman"
+      font_size_pt: 12
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+      expected_blank_min: 2
+      expected_blank_max: 3
+      debug: true
+
+    - check: copyright_notice
+      font_name: Times New Roman
+      font_size_pt: 10
+      italic: true
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+      text_contains: >
+        Bu tezde kullanılan özgün bilgiler, şekil, çizelge ve fotoğraflardan
+        kaynak göstermeden alıntı yapmak 5846 sayılı Fikir ve Sanat Eserleri
+        Kanunu hükümlerine tabidir.
+    
+    - check: approval_single_page_check
+      enabled: true
+      description: "Onay sayfası tek sayfada olmalı (TEZ ONAYI ve COPYRIGHT aynı sayfada)"
+      debug: true
+
+
+
+  # ----------------------------------------------------------
+  # ETİK BEYANI
+  # ----------------------------------------------------------
+  ethics:
+    enabled: true
+    rules:
+    - check: ethics_statement_heading
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 0
+      expected_text: "TEZ ÇALIŞMASI ETİK BEYANI"
+      markers: ['^(TEZ\s*ÇALIŞMASI\s*ETİK\s*BEYANI|TEZ\s*ÇALIŞMASI\s*ETİK\s*BEYAN|TEZ\s*ETİK\s*BEYAN|TEZ\s*ETİK\s*BEYANI|ETİK\s*BEYAN|ETİK\s*BEYANI|ETİK\s*FORM|ETİK\s*FORMU)$']
+
+
+    - check: ethics_statement_post_heading_spacing
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 0
+      expected_lines: 2
+
+    - check: ethics_statement_body
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 0
+      until_marker: "^ÖZET$"
+      section_break_required: true
+
+    - check: ethics_statement_ai_statement_exclusive
+      description: "ETİK BEYAN - ÜYZ beyanları aynı anda bulunamaz"
+      markers: ['^TEZ ÇALIŞMASI ETİK BEYANI$|^(TEZ\s*(ÇALIŞMASI)?\s*)?ETİK\s*(BEYAN(I)?|FORM(U)?)$']      
+      until_marker: '^ÖZET$'
+      ai_statement_patterns:
+        no_ai:
+          - 'Tez\s*çalışmamda.*Üretken\s*Yapay\s*Zek[aâ]\s*\(ÜYZ\).*kullanmad'
+        ai_under_guidelines:
+          - 'Tez\s*çalışmamda.*Yükseköğretim\s*Kurumlar.*Üretken\s*Yapay\s*Zek[aâ]\s*\(ÜYZ\).*Etik\s*Rehberi'
+
+  # ----------------------------------------------------------
+  # TÜRKÇE ÖZET
+  # ----------------------------------------------------------
+  abstract_tr:
+    enabled: true
+    display_name: "TÜRKÇE ÖZET"
+    rules:
+      # ÖZET BAŞLIĞI
+      - check: abstract_tr_heading
+        markers: ['^ÖZET$', '^TÜRKÇE\s*ÖZET(T)?$', '^ÖZT$', '^ÖZET(T)?$']
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        bold: true          #  başlık bold olmalı
+        alignment: center
+
+      - check: abstract_tr_spacing_after_heading
+        description: "ÖZET başlığından sonra 5 satır boşluk bırakılmalı"
+        required_blank_lines: 5
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_thesis_title
+        description: "ÖZET sayfasındaki tez başlığı satırı"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_spacing_after_title
+        description: "Tez başlığından sonra 2 satır boşluk bırakılmalı"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_author_name
+        description: "ÖZET sayfasındaki tez yazarının adı soyadı"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        uppercase: true
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_spacing_after_author
+        description: "Tez yazarı adından sonra 2 satır boşluk bırakılmalı"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_program_block
+        description: "ÖZET sayfasındaki program/anabilim dalı ve danışman bloğu"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        expected_lines: 3
+        optional_lines: [3]   # 3. satır (II. Danışman) opsiyonel
+
+      - check: abstract_tr_spacing_after_program_block
+        description: "Program/Danışman bloğundan sonra 2 satır boşluk bırakılmalı"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_date
+        description: "ÖZET sayfasındaki tarih (Ay + Yıl)"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        pattern: "^(Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\\s+[0-9]{4},"
+        normalize_tr: true
+
+      - check: abstract_tr_pageinfo
+        description: "ÖZET sayfasındaki sayfa bilgisi (Roma + Arap rakamı + 'sayfa')"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        pattern: "([ivxlcdm]+)\\s*\\+\\s*[0-9]+\\s*sayfa$"
+        normalize_tr: true
+
+      - check: abstract_tr_spacing_after_pageinfo
+        description: "Tarih ve sayfa bilgisinden sonra 3 satır boşluk bırakılmalı"
+        expected_blank_lines: 3
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: abstract_tr_body
+        description: "TÜRKÇE ÖZET gövdesi Times New Roman, 12 punto, tek satır aralığı, iki yana yaslı olmalı"
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        alignment: justify
+
+      - check: abstract_tr_keywords_line
+        label: "Anahtar Kelimeler:"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold_label: true
+        alignment: justify
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        normalize_whitespace: true   # <- ekledik, tab ve boşluk aynı
+        markers: ['^ANAHTAR\s*(KEL(İ|I)ME(LER)?|SÖZCÜ(KLER)?|SOZCU(KLER)?)\s*[:：\-\.\)]?\s*']
+
+
+
+
+  # ----------------------------------------------------------
+  # İNGİLİZCE ÖZET, ABSTRACT
+  # ----------------------------------------------------------
+  abstract_en:
+    enabled: true
+    rules:
+      # ABSTRACT Başlığı
+      - check: abstract_en_heading
+        description: "ABSTRACT başlığı Times New Roman, 12 punto, 1.0 satır aralığı, önce/sonra 0, ortalı ve kalın olmalı."
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        alignment: center
+        bold: true
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_spacing_after_heading
+        expected_blank_lines: 5
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+        no_italic: true
+
+      - check: abstract_en_thesis_title
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        bold: true
+        align: center
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_spacing_after_title
+        description: "Tez başlığından sonra 2 satır boşluk"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_author_name
+        description: "Tez yazarının adı-soyadı"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        align: center
+        uppercase: true
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_spacing_after_author
+        description: "Tez yazarı satırından sonra 2 satır boşluk"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_program_block
+        description: "Doktora / Yüksek Lisans – Anabilim Dalı – Danışman Bloğu"
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        expected_lines: 3
+        optional_lines: [3]   # 3. satır (II. Danışman) opsiyonel
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_spacing_after_program_block
+        description: "Program/Danışman bloğundan sonra 2 satır boşluk"
+        expected_blank_lines: 2
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_date
+        description: "ABSTRACT sayfasında tarih satırı (Ay adı + Yıl) kontrolü"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+
+      - check: abstract_en_pages
+        description: "ABSTRACT sayfasında sayfa sayısı bilgisi (ör: viii + 150 pages) kontrolü"
+        font_name: Times New Roman
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_spacing_after_pageinfo
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        expected_lines: 3
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_body
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        blanks_after_pageinfo: 3
+        markers: ['^ABSTRACT$', '^ABSRAC(T)?$', '^ABSTRAK(T)?$', '^ABTRACT$', '^ABSTRAC(T)?$', '^ABSTARCT$']
+
+      - check: abstract_en_keywords
+        font_name: Times New Roman
+        font_size_pt: 12
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+        bold_label: true
+        alignment: left
+        markers: ["^KEYWORDS\\s*:\\s*", "^KEY\\s*WORDS\\s*:\\s*", "^KEY\\-WORDS\\s*:\\s*", "^KEYWORD\\s*:\\s*", "^KEY\\s*WORD\\s*:\\s*"]
+
+
+  # ======================================================
+  # ÖN SÖZ / TEŞEKKÜR (DEDICATION) SAYFASI
+  # ======================================================
+  acknowledgements:
+    enabled: true
+    rules:
+    - check: acknowledgements_heading
+      description: "ÖN SÖZ / TEŞEKKÜR başlığı Times New Roman, 12 punto, kalın, ortalı, 1.5 satır aralığı, önce 0, sonra 24"
+      font_name: Times New Roman
+      font_size_pt: 12
+      bold: true
+      all_caps: true
+      alignment: center
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 24
+      markers: ['^(ÖN\\s*SÖZ|ÖNSÖZ)(\\s*[/\\-–—]\\s*TEŞEKKÜR)?$|^TEŞEKKÜR$']
+      # markers: ["^ÖN SÖZ$", "^TEŞEKKÜR$", "^ÖN SÖZ/TEŞEKKÜR$", "^ÖN SÖZ / TEŞEKKÜR$", "^ÖNSÖZ/TEŞEKKÜR$"]
+
+    - check: acknowledgements_no_blank
+      description: "ÖN SÖZ / TEŞEKKÜR başlığı ile gövde arasında boş satır bulunmamalıdır."
+      markers: ['^(ÖN\\s*SÖZ|ÖNSÖZ)(\\s*[/\\-–—]\\s*TEŞEKKÜR)?$|^TEŞEKKÜR$']
+      # markers: ["^ÖN SÖZ$", "^TEŞEKKÜR$", "^ÖN SÖZ/TEŞEKKÜR$", "^ÖN SÖZ / TEŞEKKÜR$", "^ÖNSÖZ/TEŞEKKÜR$"]
+
+    - check: acknowledgements_body_format
+      description: "ÖN SÖZ / TEŞEKKÜR gövde metni Times New Roman, 12 punto, iki yana yaslı, 1.5 satır aralığı, önce 6, sonra 6 olmalıdır."
+      font_name: Times New Roman
+      font_size_pt: 12
+      alignment: justify
+      line_spacing: 1.5
+      space_before: 6
+      space_after: 6
+
+# ======================================================
+# İÇİNDEKİLER SAYFASI
+# ======================================================
+  toc:
+    enabled: true
+    rules:
+    - check: toc_heading
+      description: "İÇİNDEKİLER başlığı Times New Roman, 12 punto, kalın, BÜYÜK HARF, ortalı, Tek satır, önce 0, sonra 0; ÖN SÖZ/TEŞEKKÜR’den sonra gelmeli."
+      font_name: Times New Roman
+      font_size_pt: 12
+      bold: true
+      all_caps: true
+      alignment: center
+      line_spacing: 1
+      space_before: 0
+      space_after: 0
+      markers: ["^İÇİNDEKİLER$"]   # norm_tr zaten işaretleri sadeleştiriyor
+
+    - check: toc_one_blank_with_format
+      description: "İÇİNDEKİLER başlığından sonra tam 1 boş paragraf: Times New Roman, 12 pt, tek satır aralığı (1.0), paragraf öncesi 0, sonrası 0."
+      font_name: Times New Roman
+      font_size_pt: 12
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+
+    - check: toc_page_label_line
+      description: "İÇİNDEKİLER’de 3. satırda 'Sayfa' kelimesi: Times New Roman, 12 pt, sağa dayalı, tek satır (1.0), önce 0, sonra 0."
+      font_name: Times New Roman
+      font_size_pt: 12
+      alignment: right
+      bold: true
+      line_spacing: 1.0
+      space_before: 0
+      space_after: 0
+      markers: ["^İÇİNDEKİLER$"]   # toc_heading ile aynı marker kullanılsın ki başlık aynı şekilde bulunsun
+    
+    - check: toc_table_body_format # ... (toc_heading, toc_one_blank_with_format, toc_page_label_line mevcut)
+      description: "İÇİNDEKİLER gövde: (Sayfa satırından sonra) TNR 12 pt, iki yana yaslı, 1.5 satır, önce 0 / sonra 0."
+      font_name: Times New Roman
+      font_size_pt: 12
+      alignment: justify
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 0
+      markers: ["^İÇİNDEKİLER$"]
+
+    - check: toc_expected_order
+      description: "İÇİNDEKİLER sırası: 1) ÖZET 2) ABSTRACT 3) ÖN SÖZ/TEŞEKKÜR … (son satır) ÖZGEÇMİŞ veya BENZERLİK RAPORU."
+      markers: ["^İÇİNDEKİLER$"]
+
+  # ----------------------------------------------------------
+  # ÇİZELGELER DİZİNİ SAYFASI
+  # ----------------------------------------------------------
+  list_of_tables:
+    enabled: true
+    rules:
+      - check: list_of_tables_heading
+        description: "Çizelgeler Dizini başlığının biçim ve konum kontrolü (İçindekiler'den sonra)."
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        all_caps: true
+        alignment: center
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        markers: ["^ÇİZELGELER DİZİNİ$"]
+      
+      - check: list_of_tables_page_label_line
+        description: "Çizelgeler Dizini başlığından hemen sonraki satırın 'Sayfa' olması ve biçimsel özelliklerinin doğruluğu."
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        alignment: right
+        line_spacing: 1
+        space_before: 0
+        space_after: 0
+
+      - check: list_of_tables_body_format
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        alignment: "left" #"none"
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 0
+        debug: true
+
+  # ----------------------------------------------------------
+  # ŞEKİLLER DİZİNİ SAYFASI
+  # ----------------------------------------------------------
+  list_of_figures:
+    enabled: true
+    rules:
+      - check: list_of_figures_heading
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        all_caps: true
+        alignment: center
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        markers: ["^ŞEKİLLER DİZİNİ$"]
+
+      - check: list_of_figures_page_label_line
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        alignment: right
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 0
+
+      - check: list_of_figures_body_format
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        alignment: left
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 0
+        debug: true
+
+  # ----------------------------------------------------------
+  # SEMBOLLER VE KISALTMALAR
+  # ----------------------------------------------------------
+  symbols_abbreviations:
+    enabled: true
+    rules:
+      - check: symbols_abbreviations_heading
+        must_exist: false
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        all_caps: true
+        alignment: center
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        space_tolerance_pt: 2.0   # ← İSTEĞE BAĞLI: 2 nk tolerans
+        markers:
+          - "^SİMGELER VE KISALTMALAR$"
+          - "^SİMGELER VE KISALTMALAR DİZİNİ$"
+
+      - check: mark_main_text_start # TEZ METNİNİN BAŞLAŞLADIĞI YERİ TESPİT ETMEK İÇİN
+        note_only: true   # sadece memoya işaret koyup bilgi döndürsün
+
+  # ----------------------------------------------------------
+  # TEZ METNİ  
+  # ----------------------------------------------------------
+  chapter_start:
+    enabled: true
+    rules:
+
+      - check: chapter_heading_block
+        description: >
+          "BÖLÜM X" başlığı ve hemen altındaki alt başlık (ör. GİRİŞ, YÖNTEM, SONUÇLAR) biçimsel olarak
+          Times New Roman, 12 punto, kalın, ortalı, 1.5 satır aralığı, paragraf öncesi 0 ve sonrası 24 olmalıdır.
+          Bu başlıklar gövde paragraf kurallarına dahil edilmez.
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        alignment: center
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        debug: true  # debug: true olduğunda chapter_debug.txt oluşturulur
+      
+      - check: chapter_heading_no_blank
+
+
+      - check: references_heading_block
+        description: >
+          Tezin "KAYNAKLAR" başlığını tespit eder ve biçimsel olarak kontrol eder.
+        accepted_variants: ["KAYNAÇA", "KAYNAKÇA", "KAYNAKCA"]
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        all_caps: true
+        alignment: "center"
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        debug: true
+
+      - check: subheading_detector
+        enabled: true
+        debug: true
+        heading_styles: ["Heading 2", "Heading 3", "Heading 4"]
+        font_name: "Times New Roman"
+        alignment: ["justify", "left"] #alignment’ı explicit verirsen (left/center/justify/right), tam o beklenir. alignment: any dersen de kontrol atlanır.
+        font_size_pt: 12
+        bold: true
+        line_spacing: 1.5
+        space_before: 18
+        space_after: 18
+
+      - check: subheading_number_sequence
+        enabled: true
+        debug: true
+
+      - check: figure_caption_detector
+        enabled: true
+        description: >
+          Tez metni içinde şekil başlıklarını tespit eder ve biçimsel olarak kontrol eder.
+        font_name: "Times New Roman"
+        font_size_pt: 10
+        line_spacing: 1.0
+        space_before: 0
+        space_after: 12
+        alignment: "left"
+        debug: true
+
+      - check: figure_numbering_check
+        enabled: true
+        description: >
+          Şekil numaralarının sıralı ve benzersiz olmasını kontrol eder.
+          Örneğin Şekil 2.3 iki kez kullanılmışsa veya Şekil 3.2'den sonra Şekil 3.4 gelmişse hata verir.
+
+      - check: table_caption_detector
+        enabled: true
+        description: >
+          Tez metni içinde çizelge başlıklarını tespit eder ve biçimsel olarak kontrol eder.
+        font_name: "Times New Roman"
+        font_size_pt: 10
+        line_spacing: 1.0
+        space_before: 12
+        space_after: 0
+        alignment: "left"
+        debug: true
+        max_words: 15
+        forbidden_contains:
+          - " ile "
+          - " olarak "
+          - " göster"
+          - " değerlendir"
+          - " sunul"
+          - " veril"
+          - " elde edilen"
+
+      - check: table_numbering_check
+        enabled: true
+        description: >
+          Çizelge numaralarının sıralı ve benzersiz olmasını kontrol eder.
+          Örneğin Çizelge 2.3 iki kez kullanılmışsa veya Çizelge 3.2'den sonra Çizelge 3.4 gelmişse hata verir.
+
+
+      - check: body_paragraph_format
+        description: >
+          Tez metni gövdesi biçimsel kurallara uygun olmalı:
+          Times New Roman, 12 punto, 1.5 satır aralığı, iki yana yaslı,
+          paragraf öncesi ve sonrası 6 pt, ilk satır girintisi 1.25 cm olmalıdır.
+          Kontrol 'GİRİŞ' satırından sonra başlayıp 'KAYNAKLAR' başlığına kadar devam eder.
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        line_spacing: 1.5
+        space_before: 6
+        space_after: 6
+        first_line_indent_cm: 1.25
+        alignment: justify
+        start_marker: "^GİRİŞ$"
+        end_marker: "^KAYNAKLAR$"
+        skip_contains:
+            - "XXXXX"
+        skip_fonts:
+            - "Cambria Math"
+        skip_if_contains_math_symbols: true
+        debug: true
+
+      - check: list_paragraph_format
+        enabled: true
+        description: "Liste biçimi: numara 0.63 cm, metin 1.27 cm girintide olmalı."
+        text_indent_cm: 1.27
+        bullet_indent_cm: 0.63
+        tolerance_cm: 0.10
+        debug: true
+
+  # ----------------------------------------------------------
+  # KAYNAKLAR, EKLER, ÖZGEÇMİŞ, BENZERLİK RAPORU
+  # ----------------------------------------------------------
+  endmatter:
+    enabled: true
+    rules:
+    - check: order_is
+      sequence:
+      - Kaynaklar
+      - Ekler
+      - Özgeçmiş
+      - Benzerlik Raporu
+    - check: appendix_labels
+      pattern: ^Ek-[A-Z]
+
+  # ----------------------------------------------------------
+  # DENKLEMLER
+  # ----------------------------------------------------------
+  equations:
+    enabled: true
+    rules:
+    - align: right
+      check: numbering_format
+      pattern: ^\((\d+)\.(\d+)([a-z])?\)$
+    - check: inline_reference_format
+      pattern: denklem \((\d+)\.(\d+)\)
+
+
+  # ----------------------------------------------------------
+  # ALT BİLGİLER (Dipnotlar)
+  # ----------------------------------------------------------
+  footnotes:
+    enabled: true
+    rules:
+    - check: font
+      name: Times New Roman
+      size_pt: 10
+    - check: line_spacing_equals
+      value: 1.0
+
+
+  # ----------------------------------------------------------
+  # KAYNAKÇA
+  # ----------------------------------------------------------
+  references:
+    enabled: true
+    rules:
+    - check: references_heading_block
+      description: >
+        Tezin "KAYNAKLAR" başlığını tespit eder ve biçimsel olarak kontrol eder.
+      font_name: "Times New Roman"
+      font_size_pt: 12
+      bold: true
+      all_caps: true
+      alignment: "center"
+      line_spacing: 1.5
+      space_before: 0
+      space_after: 24
+      debug: true

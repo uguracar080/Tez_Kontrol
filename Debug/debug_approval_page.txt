@@ -1,0 +1,322 @@
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 43
+Alt-üst limit: 2-3
+===========================================
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+[40. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 44
+Alt-üst limit: 2-3
+===========================================
+[43. satır] (boş) → (boş paragraf)
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+
+
+
+===========================================
+[DEBUG] Makam Bloğu Öncesi Boşluk Kontrolü (max-kısıtlı)
+Makam bloğu başlangıç satırı: 43
+Alt-üst limit: 2-3
+===========================================
+[42. satır] (boş) → (boş paragraf)
+[41. satır] (boş) → (boş paragraf)
+[40. satır] (boş) → (boş paragraf)
+→ Maksimum 3 boş satıra ulaşıldı, sayım durduruldu.
+Toplam sayılan (sadece en yakındaki) boş satır: 3
+-------------------------------------------
+

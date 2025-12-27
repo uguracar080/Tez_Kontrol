@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OKÜ LEE | Tez Biçim Kontrol</title>
+
+  <style>
+    :root{
+      --oku-red: #b1121b;
+      --oku-red-2: #c21822;
+
+      --bg: #7f0b12;
+      --card: rgba(255,255,255,.06);
+      --muted: rgba(255,255,255,.82);
+      --text: #ffffff;
+      --line: rgba(255,255,255,.22);
+
+      --accent: #ffffff;
+
+      --good:#3ddc97;
+      --warn:#ffd166;
+      --bad:#ff5c7a;
+
+      --bg-grad-1: radial-gradient(1200px 650px at 18% -10%, rgba(255,255,255,.14), transparent 62%);
+      --bg-grad-2: radial-gradient(900px 520px at 95% 10%, rgba(255,255,255,.08), transparent 58%);
+      --bg-grad-3: linear-gradient(180deg, var(--oku-red-2) 0%, var(--bg) 70%, #65070c 100%);
+
+      --btn-bg: rgba(255,255,255,.10);
+      --btn-bg-hover: rgba(255,255,255,.16);
+      --input-bg: rgba(255,255,255,.08);
+
+      --drop-bg: rgba(255,255,255,.06);
+      --drop-border: rgba(255,255,255,.42);
+      --drop-drag-bg: rgba(255,255,255,.14);
+      --drop-drag-border: rgba(255,255,255,.85);
+    }
+
+    html[data-theme="light"]{
+      --bg: #fff6f7;
+      --card: rgba(255,255,255,.88);
+      --muted: rgba(32,32,32,.72);
+      --text: #1f2430;
+      --line: rgba(0,0,0,.10);
+
+      --accent: var(--oku-red);
+
+      --bg-grad-1: radial-gradient(1200px 650px at 18% -10%, rgba(177,18,27,.18), transparent 62%);
+      --bg-grad-2: radial-gradient(900px 520px at 95% 10%, rgba(177,18,27,.10), transparent 58%);
+      --bg-grad-3: linear-gradient(180deg, #ffffff 0%, var(--bg) 70%, #ffe9ec 100%);
+
+      --btn-bg: rgba(177,18,27,.10);
+      --btn-bg-hover: rgba(177,18,27,.16);
+      --input-bg: rgba(0,0,0,.03);
+
+      --drop-bg: rgba(177,18,27,.06);
+      --drop-border: rgba(177,18,27,.35);
+      --drop-drag-bg: rgba(177,18,27,.10);
+      --drop-drag-border: rgba(177,18,27,.55);
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        var(--bg-grad-1),
+        var(--bg-grad-2),
+        var(--bg-grad-3);
+      color:var(--text);
+    }
+
+    a{ color: var(--accent); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .wrap{ max-width: 1050px; margin: 34px auto; padding: 0 18px 40px; }
+
+    .topbar{
+      display:flex; gap:14px; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; margin-bottom: 16px;
+    }
+    .brand{ display:flex; gap:12px; align-items:center; }
+    .logoBox{
+      width: 86px; height: 86px; border-radius: 18px;
+      background: rgba(255,255,255,.96);
+      border: 2px solid rgba(255,255,255,.55);
+      display:flex; align-items:center; justify-content:center;
+      overflow:hidden;
+      box-shadow: 0 18px 40px rgba(0,0,0,.28), 0 0 0 6px rgba(177,18,27,.12);
+      flex:0 0 auto;
+    }
+    .logoBox img{ width:100%; height:100%; object-fit:contain; padding:4px; }
+
+    .brandTitle{ margin:0; font-size:20px; line-height:1.22; letter-spacing:.2px; }
+    .brandTitle span{ display:block; }
+    .brandTitle .subTitle{ font-size:16.5px; font-weight:650; color:var(--muted); margin-top:2px; }
+
+    .brand p{ margin:4px 0 0; color:var(--muted); font-size:13px; line-height:1.4; }
+
+    .meta{
+      display:flex; gap:10px; align-items:center; justify-content:flex-end;
+      color: var(--muted); font-size: 13px; flex-wrap: nowrap;
+    }
+    .badge{
+      border:1px solid var(--line);
+      padding:6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+    .themeBtn{
+      border:1px solid var(--line);
+      padding:6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      cursor:pointer;
+      font: inherit;
+      display:flex; align-items:center; gap:8px;
+      transition: .12s ease;
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+    .themeBtn:hover{ background: rgba(255,255,255,.10); }
+    html[data-theme="light"] .themeBtn:hover{ background: rgba(177,18,27,.12); }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 930px){ .grid{ grid-template-columns: 1fr; } }
+
+    .card{
+      background: var(--card);
+      border:1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 18px 55px rgba(0,0,0,.20);
+      backdrop-filter: blur(10px);
+    }
+
+    .card h2{ margin:0 0 10px; font-size:15.5px; letter-spacing:.2px; }
+    .card p{ margin: 8px 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+
+    .drop{
+      border: 2px dashed var(--drop-border);
+      border-radius: 16px;
+      padding: 16px;
+      text-align:center;
+      background: var(--drop-bg);
+      transition: .15s ease;
+    }
+    .drop.drag{
+      border-color: var(--drop-drag-border);
+      background: var(--drop-drag-bg);
+      transform: translateY(-1px);
+    }
+
+    .row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 12px; }
+
+    input[type=file]{
+      width: 100%;
+      max-width: 360px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--input-bg);
+      color: var(--text);
+    }
+
+    button{
+      padding: 11px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--btn-bg);
+      color: var(--text);
+      cursor:pointer;
+      transition: .12s ease;
+      font-weight: 700;
+      letter-spacing:.2px;
+    }
+    button:hover{ background: var(--btn-bg-hover); }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+
+    .status{
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color: var(--muted);
+      font-size: 14px;
+      min-height: 42px;
+      display:flex; align-items:center; gap:10px;
+    }
+
+    .dot{ width:10px; height:10px; border-radius: 999px; background: rgba(255,255,255,.22); flex:0 0 auto; }
+    .dot.good{ background: var(--good); }
+    .dot.warn{ background: var(--warn); }
+    .dot.bad{ background: var(--bad); }
+    .dot.spin{
+      background: transparent;
+      border: 2px solid rgba(255,255,255,.22);
+      border-top-color: rgba(255,255,255,.95);
+      width: 14px; height: 14px;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg);} }
+
+    .logbox{
+      border:1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(0,0,0,.22);
+      padding: 10px;
+    }
+    html[data-theme="light"] .logbox{ background: rgba(0,0,0,.04); }
+    .loghdr{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 8px; }
+    .loghdr small{ color: var(--muted); }
+    pre{
+      margin:0;
+      max-height: 420px;
+      overflow:auto;
+      font-size: 12.5px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .divider{ height: 1px; background: var(--line); margin: 12px 0; }
+    .footer{ margin-top: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+
+    .refBox{
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.06);
+      display:block;
+      color: var(--text);
+      text-decoration:none;
+      transition: .12s ease;
+    }
+    html[data-theme="light"] .refBox{ background: rgba(0,0,0,.02); }
+    .refBox b{ display:block; margin-bottom: 6px; }
+    .refBox:hover{
+      background: rgba(255,255,255,.09);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 25px rgba(0,0,0,.18);
+      text-decoration:none;
+    }
+    html[data-theme="light"] .refBox:hover{
+      background: rgba(0,0,0,.03);
+      box-shadow: 0 10px 25px rgba(0,0,0,.10);
+    }
+    .refLine{
+      display:flex;
+      gap:8px;
+      align-items:flex-start;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .refIcon{
+      font-size: 18px;
+      line-height: 1;
+      margin-top: 1px;
+      flex: 0 0 auto;
+    }
+
+    .fullCard{ margin-top: 16px; }
+
+    .pbar{
+      margin-top: 8px;
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      overflow:hidden;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.08);
+    }
+    .pfill{
+      height: 100%;
+      width: 0%;
+      background: var(--good);
+      transition: width .25s ease;
+    }
+
+    .sumMeta{ margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+    .sumHdr{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 8px; }
+    .sumList{ display:flex; flex-direction:column; gap:10px; }
+
+    .sumItem{
+      border:1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.06);
+      user-select: none;
+      transition: .12s ease;
+    }
+    .sumItem:hover{
+      transform: translateY(-1px);
+      background: rgba(255,255,255,.09);
+    }
+
+    /* Sağ özet kartı için: tıklamasız/hover'suz mini kartlar */
+    .miniItem{
+      border:1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.06);
+      user-select: none;
+    }
+    .miniItem:hover{
+      transform: none;
+      background: rgba(255,255,255,.06);
+    }
+
+    /* ✅ Artık sadece header tıklanabilir olacak */
+    .sumItemHeader{
+      cursor: pointer;
+    }
+
+    .sumItemTop{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .sumItemTop b{ font-size: 13.5px; }
+
+    .rightPct{
+      font-weight: 800;
+      font-size: 13px;
+      white-space: nowrap;
+      color: var(--text);
+    }
+
+    /* ✅ İstenen: T/U/X yüzde altına, sağa yaslı, kalın değil */
+    .belowStats{
+      margin-top: 4px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .violBox{
+      margin-top: 10px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      display: none;
+
+      /* ✅ Kopyalama için seçilebilir yap */
+      user-select: text;
+      cursor: text;
+    }
+
+    .violHint{
+      color: var(--muted);
+      font-size: 12.5px;
+      margin-bottom: 8px;
+    }
+
+    table{
+      width:100%;
+      border-collapse: collapse;
+      overflow:hidden;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.10);
+    }
+    html[data-theme="light"] table{ background: rgba(0,0,0,.02); }
+
+    th, td{
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 12.8px;
+      line-height: 1.35;
+      user-select: text; /* ✅ tablo metni seçilsin */
+    }
+    th{
+      text-align:left;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,.06);
+      white-space: nowrap;
+    }
+    tr:last-child td{ border-bottom: none; }
+
+    .colNo{ width: 70px; white-space: nowrap; }
+    .colTitle{ width: 36%; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <div class="topbar">
+      <div class="brand">
+        <div class="logoBox"><img src="/static/logo.png" alt="OKÜ Logo" /></div>
+        <div>
+          <h1 class="brandTitle">
+            <span>Osmaniye Korkut Ata Üniversitesi</span>
+            <span class="subTitle">Lisansüstü Eğitim Enstitüsü</span>
+          </h1>
+          <p>Tez Biçim Kontrol Sistemi (DOCX). Yükle → kontrol et → PDF raporu indir.</p>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="badge">Modül: Tez Kontrol</div>
+        <div class="badge">Sürüm: <b id="appVer">V1.0</b></div>
+        <div class="badge">Çalışma: Lokal Sunucu</div>
+
+        <button id="themeToggle" class="themeBtn" type="button">
+          <span id="themeIcon" aria-hidden="true">🌙</span>
+          <span id="themeText">Koyu</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Sol -->
+      <div>
+        <div class="card">
+          <h2>Tez Dosyası Yükleme</h2>
+          <p>Desteklenen format <b>.docx</b>. Analiz sonunda rapor <b>PDF</b> olarak indirilecektir.</p>
+
+          <div id="drop" class="drop">
+            <div style="font-weight:800; font-size:15px;">Sürükle–Bırak</div>
+            <p style="margin-top:6px;">Dosyayı bu alana bırakın veya aşağıdan seçin.</p>
+
+            <div class="row">
+              <input id="file" type="file" accept=".docx" />
+              <button id="analyze" type="button">Analiz Et</button>
+            </div>
+
+            <p id="fname" style="margin-top:10px;color:var(--muted);font-size:13px;"></p>
+          </div>
+
+          <div id="status" class="status">
+            <span id="dot" class="dot"></span>
+            <span id="statusText">Hazır. Dosya seçip analizi başlatabilirsiniz.</span>
+          </div>
+        </div>
+
+        <!-- Canlı Log (sol alt) -->
+        <div class="card" style="margin-top:16px;">
+          <h2>Canlı Log</h2>
+          <p>Analiz sürecindeki adımlar burada anlık görünür.</p>
+
+          <div class="logbox">
+            <div class="loghdr">
+              <b>Akış</b>
+              <small id="logState">Bağlantı: bekleniyor...</small>
+            </div>
+            <pre id="logs">(log akışı bağlanınca burada görünecek)</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sağ -->
+      <div class="card">
+        <h2>Analiz Özeti</h2>
+        <p>Bu alan, sonuçların tıklamasız özetini gösterir (detaylar aşağıdaki Uyumluluk Özeti bölümündedir).</p>
+
+        <div id="sideEmpty" style="color:var(--muted); font-size:13px;">
+          Henüz analiz yapılmadı.
+        </div>
+
+        <div id="sideBox" style="display:none;">
+          <div style="margin-top:10px;">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+              <b>Genel Uyum Başarısı</b>
+              <b id="sideOverallPct">%0.0</b>
+            </div>
+            <div class="pbar"><div id="sideOverallBar" class="pfill" style="width:0%"></div></div>
+            <div class="sumMeta" id="sideOverallMeta">(Kontrol edilen: 0, Uygun: 0, Uygunsuz: 0)</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="sumHdr">
+            <b>Kategoriler</b>
+            <small style="color:var(--muted);">Uygun / Toplam (tez)</small>
+          </div>
+
+          <div class="sumList">
+            <div class="miniItem">
+              <div class="sumItemTop">
+                <b>Ön Sayfalar</b>
+                <span class="rightPct" id="catFrontPct">%0.0</span>
+              </div>
+              <div class="pbar"><div id="catFrontBar" class="pfill" style="width:0%"></div></div>
+              <div class="belowStats" id="catFrontMeta">(U:0 / T:0)</div>
+            </div>
+
+            <div class="miniItem">
+              <div class="sumItemTop">
+                <b>Tez Metni</b>
+                <span class="rightPct" id="catBodyPct">%0.0</span>
+              </div>
+              <div class="pbar"><div id="catBodyBar" class="pfill" style="width:0%"></div></div>
+              <div class="belowStats" id="catBodyMeta">(U:0 / T:0)</div>
+            </div>
+
+            <div class="miniItem">
+              <div class="sumItemTop">
+                <b>Arka Sayfalar</b>
+                <span class="rightPct" id="catBackPct">%0.0</span>
+              </div>
+              <div class="pbar"><div id="catBackBar" class="pfill" style="width:0%"></div></div>
+              <div class="belowStats" id="catBackMeta">(U:0 / T:0)</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="sumHdr">
+            <b>Bölümler (Özet)</b>
+            <small style="color:var(--muted);">Sadece görüntüleme</small>
+          </div>
+
+          <div id="sideSectionList" class="sumList"></div>
+        </div>
+
+        <a
+          class="refBox"
+          href="https://www.osmaniye.edu.tr/tr/lisansustu/menuler/bilgi-belge/formlar/47390-tez-yazim-kilavuzu"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <b>Enstitü Kaynakları</b>
+          <div class="refLine">
+            <span class="refIcon" aria-hidden="true">📄</span>
+            <span>Tez Yazım Kılavuzu, şablon dosyası ve kontrol listesi gibi belgelere ulaşmak için tıklayın</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+        <!-- Full width summary -->
+    <div class="card fullCard">
+      <h2>Uyumluluk Özeti</h2>
+      <p>Genel uyum yüzdesi ve bölüm bazında uyum + ihlaller burada görünür.</p>
+
+      <div id="summaryEmpty" style="color:var(--muted); font-size:13px;">
+        Henüz analiz yapılmadı.
+      </div>
+
+      <div id="summaryBox" style="display:none;">
+        <div style="margin-top:10px;">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+            <b>Genel Uyum Başarısı</b>
+            <b id="overallPct">%0.0</b>
+          </div>
+          <div class="pbar"><div id="overallBar" class="pfill" style="width:0%"></div></div>
+          <div class="sumMeta" id="overallMeta">(Kontrol edilen: 0, Uygun: 0, Uygunsuz: 0)</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="sumHdr">
+          <b>Bölüm Bazında Değerlendirme</b>
+          <small style="color:var(--muted);">Toplam / Uygun / Uygunsuz</small>
+        </div>
+
+        <div id="sectionList" class="sumList"></div>
+
+        <div class="divider"></div>
+
+        <div class="row" style="justify-content:flex-start;">
+          <button id="openPdf" type="button" disabled>PDF'i Aç / İndir</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+const APP_VERSION = "V1.0";
+const API_URL = "/api/analyze";
+const LOG_STREAM_URL = "/api/logs/stream";
+
+document.getElementById("appVer").textContent = APP_VERSION;
+
+// Theme
+const THEME_KEY = "oku_theme";
+const htmlEl = document.documentElement;
+const themeBtn = document.getElementById("themeToggle");
+const themeIcon = document.getElementById("themeIcon");
+const themeText = document.getElementById("themeText");
+
+function applyTheme(theme){
+  htmlEl.setAttribute("data-theme", theme);
+  if(theme === "light"){
+    themeIcon.textContent = "☀️";
+    themeText.textContent = "Açık";
+  } else {
+    themeIcon.textContent = "🌙";
+    themeText.textContent = "Koyu";
+  }
+}
+(function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  if(saved === "light" || saved === "dark") applyTheme(saved);
+  else applyTheme("dark");
+})();
+themeBtn.addEventListener("click", () => {
+  const cur = (htmlEl.getAttribute("data-theme") === "light") ? "light" : "dark";
+  const next = (cur === "light") ? "dark" : "light";
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+});
+
+// drag/drop default
+window.addEventListener("dragover", (e) => e.preventDefault(), false);
+window.addEventListener("drop", (e) => e.preventDefault(), false);
+
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const fname = document.getElementById("fname");
+const statusText = document.getElementById("statusText");
+const dot = document.getElementById("dot");
+const analyzeBtn = document.getElementById("analyze");
+
+const logsEl = document.getElementById("logs");
+const logState = document.getElementById("logState");
+
+function setStatus(kind, text){
+  statusText.textContent = text;
+  dot.className = "dot";
+  if(kind === "ok") dot.classList.add("good");
+  else if(kind === "warn") dot.classList.add("warn");
+  else if(kind === "bad") dot.classList.add("bad");
+  else if(kind === "spin") dot.classList.add("spin");
+}
+
+function setSelectedFile(file) {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  fname.textContent = "Seçilen dosya: " + file.name;
+  setStatus("ok", "Dosya seçildi. Analizi başlatabilirsiniz.");
+}
+
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("drag");
+  const files = e.dataTransfer.files;
+  if (files && files.length) setSelectedFile(files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files?.length) setSelectedFile(fileInput.files[0]);
+});
+
+function escapeHtml(s){
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+
+function applyPctToBar(barEl, pct){
+  const p = Number(pct || 0);
+  barEl.style.width = `${Math.max(0, Math.min(100, p))}%`;
+  barEl.style.background = (p >= 90) ? "var(--good)" : (p >= 70) ? "var(--warn)" : "var(--bad)";
+}
+
+function computeCategorySummary(sections, overallTotal, keys){
+  const set = new Set(keys || []);
+  let ok = 0;
+  for(const s of (sections || [])){
+    if(set.has(s.key)) ok += Number(s.ok || 0);
+  }
+  const total = Number(overallTotal || 0);
+  const pct = (total > 0) ? (ok / total * 100.0) : 0;
+  return { ok, total, pct };
+}
+
+function renderSideSummary(data){
+  const sideEmpty = document.getElementById("sideEmpty");
+  const sideBox   = document.getElementById("sideBox");
+  const sideSectionList = document.getElementById("sideSectionList");
+
+  const overall = data?.overall || {};
+  const sections = data?.sections || [];
+
+  sideEmpty.style.display = "none";
+  sideBox.style.display = "block";
+
+  const pct = Number(overall.pct || 0);
+  document.getElementById("sideOverallPct").textContent = `%${pct.toFixed(1)}`;
+  applyPctToBar(document.getElementById("sideOverallBar"), pct);
+  document.getElementById("sideOverallMeta").textContent =
+    `(Kontrol edilen: ${overall.total ?? 0}, Uygun: ${overall.ok ?? 0}, Uygunsuz: ${overall.fail ?? 0})`;
+
+  // Kategoriler (tez geneli toplam kurala göre)
+  const frontKeys = [
+    "general","inner_cover","approval","ethics",
+    "abstract_en","acknowledgements","toc",
+    "list_of_tables","list_of_figures","symbols_abbreviations"
+  ];
+  const bodyKeys  = ["chapter_start"];
+  const backKeys  = ["references","appendices","cv"];
+
+  const overallTotal = Number(overall.total || 0);
+
+  const front = computeCategorySummary(sections, overallTotal, frontKeys);
+  const body  = computeCategorySummary(sections, overallTotal, bodyKeys);
+  const back  = computeCategorySummary(sections, overallTotal, backKeys);
+
+  document.getElementById("catFrontPct").textContent = `%${front.pct.toFixed(1)}`;
+  applyPctToBar(document.getElementById("catFrontBar"), front.pct);
+  document.getElementById("catFrontMeta").textContent = `(U:${front.ok} / T:${front.total})`;
+
+  document.getElementById("catBodyPct").textContent = `%${body.pct.toFixed(1)}`;
+  applyPctToBar(document.getElementById("catBodyBar"), body.pct);
+  document.getElementById("catBodyMeta").textContent = `(U:${body.ok} / T:${body.total})`;
+
+  document.getElementById("catBackPct").textContent = `%${back.pct.toFixed(1)}`;
+  applyPctToBar(document.getElementById("catBackBar"), back.pct);
+  document.getElementById("catBackMeta").textContent = `(U:${back.ok} / T:${back.total})`;
+
+  // Bölümler (tıklamasız mini liste)
+  sideSectionList.innerHTML = "";
+  for(const s of (sections || [])){
+    const sp = Number(s.pct || 0);
+
+    const item = document.createElement("div");
+    item.className = "miniItem";
+    item.innerHTML = `
+      <div class="sumItemTop">
+        <b>${escapeHtml(s.label || s.key || "")}</b>
+        <span class="rightPct">%${sp.toFixed(1)}</span>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:0%"></div></div>
+      <div class="belowStats">(T:${s.total ?? 0} / U:${s.ok ?? 0} / X:${s.fail ?? 0})</div>
+    `;
+    const fill = item.querySelector(".pfill");
+    applyPctToBar(fill, sp);
+    sideSectionList.appendChild(item);
+  }
+}
+
+function makeViolationsTable(vlist){
+  if(!Array.isArray(vlist) || vlist.length === 0){
+    const div = document.createElement("div");
+    div.className = "violHint";
+    div.textContent = "Bu bölümde ihlal bulunmadı ✅";
+    return div;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  thead.innerHTML = `
+    <tr>
+      <th class="colNo">No</th>
+      <th class="colTitle">Kural</th>
+      <th>Açıklama</th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for(const v of vlist){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="colNo">${escapeHtml(v.no ?? "")}</td>
+      <td class="colTitle">${escapeHtml(v.title ?? "")}</td>
+      <td>${escapeHtml(v.explanation ?? "")}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+async function analyze(){
+  if (!fileInput.files?.length){
+    setStatus("bad", "Dosya seçmediniz.");
+    return;
+  }
+
+  analyzeBtn.disabled = true;
+  setStatus("spin", "Analiz ediliyor, rapor hazırlanıyor...");
+
+  const summaryEmpty = document.getElementById("summaryEmpty");
+  const summaryBox   = document.getElementById("summaryBox");
+  const sectionList  = document.getElementById("sectionList");
+  const openPdfBtn   = document.getElementById("openPdf");
+
+  const sideEmpty = document.getElementById("sideEmpty");
+  const sideBox   = document.getElementById("sideBox");
+  const sideSectionList = document.getElementById("sideSectionList");
+
+  summaryEmpty.style.display = "block";
+  summaryBox.style.display = "none";
+  sectionList.innerHTML = "";
+  openPdfBtn.disabled = true;
+  openPdfBtn.onclick = null;
+
+  // Sağ taraftaki özet alanını da sıfırla
+  sideEmpty.style.display = "block";
+  sideBox.style.display = "none";
+  sideSectionList.innerHTML = "";
+
+  try{
+    const fd = new FormData();
+    fd.append("file", fileInput.files[0]);
+
+    const res = await fetch(API_URL, { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+
+    if(!res.ok || !data?.ok){
+      setStatus("bad", "Hata: " + (data.error || res.statusText));
+      return;
+    }
+
+    const overall = data.overall || {};
+    const pct = Number(overall.pct || 0);
+    document.getElementById("overallPct").textContent = `%${pct.toFixed(1)}`;
+
+    const overallBarEl = document.getElementById("overallBar");
+    overallBarEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    overallBarEl.style.background = (pct >= 90) ? "var(--good)" : (pct >= 70) ? "var(--warn)" : "var(--bad)";
+    document.getElementById("overallMeta").textContent =
+      `(Kontrol edilen: ${overall.total ?? 0}, Uygun: ${overall.ok ?? 0}, Uygunsuz: ${overall.fail ?? 0})`;
+
+    const sections = data.sections || [];
+    const violations = data.violations || {};
+
+    for(const s of sections){
+      const sp = Number(s.pct || 0);
+
+      const item = document.createElement("div");
+      item.className = "sumItem";
+
+      // ✅ sadece header tıklanacak alan
+      const header = document.createElement("div");
+      header.className = "sumItemHeader";
+
+      const top = document.createElement("div");
+      top.className = "sumItemTop";
+      top.innerHTML = `
+        <b>${escapeHtml(s.label || s.key || "")}</b>
+        <span class="rightPct">%${sp.toFixed(1)}</span>
+      `;
+
+      const below = document.createElement("div");
+      below.className = "belowStats";
+      below.textContent = `(T:${s.total ?? 0} / U:${s.ok ?? 0} / X:${s.fail ?? 0})`;
+
+      const bar = document.createElement("div");
+      bar.className = "pbar";
+      const fill = document.createElement("div");
+      fill.className = "pfill";
+      fill.style.width = `${Math.max(0, Math.min(100, sp))}%`;
+      fill.style.background = (sp >= 90) ? "var(--good)" : (sp >= 70) ? "var(--warn)" : "var(--bad)";
+      bar.appendChild(fill);
+
+      header.appendChild(top);
+      header.appendChild(below);
+      header.appendChild(bar);
+
+      const violBox = document.createElement("div");
+      violBox.className = "violBox";
+
+      const vlist = violations[s.key] || [];
+      const hint = document.createElement("div");
+      hint.className = "violHint";
+      hint.textContent = `İhlaller (${Array.isArray(vlist) ? vlist.length : 0}) — başlığa tekrar tıkla: kapat`;
+      violBox.appendChild(hint);
+      violBox.appendChild(makeViolationsTable(vlist));
+
+      // ✅ sadece header tıklayınca aç/kapa
+      header.addEventListener("click", () => {
+        const isOpen = (violBox.style.display === "block");
+        violBox.style.display = isOpen ? "none" : "block";
+      });
+
+      item.appendChild(header);
+      item.appendChild(violBox);
+      sectionList.appendChild(item);
+    }
+
+    renderSideSummary(data);
+
+    summaryEmpty.style.display = "none";
+    summaryBox.style.display = "block";
+
+    const pdfUrl = data.pdf_url || "";
+    if(pdfUrl){
+      openPdfBtn.disabled = false;
+      openPdfBtn.onclick = () => window.open(pdfUrl, "_blank");
+    }
+
+    setStatus("ok", "Tamamlandı. Bölüm başlığına tıklayarak ihlalleri aç/kapa yapabilirsiniz.");
+  } catch(err){
+    setStatus("bad", "Hata: " + (err?.message || String(err)));
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+analyzeBtn.addEventListener("click", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  analyze();
+});
+
+// logs (SSE)
+(function connectLogs(){
+  try{
+    const es = new EventSource(LOG_STREAM_URL);
+    logState.textContent = "Bağlantı: açık ✅";
+
+    es.onmessage = (ev) => {
+      if(logsEl.textContent.startsWith("(log akışı")) logsEl.textContent = "";
+      logsEl.textContent += ev.data + "\n";
+      logsEl.scrollTop = logsEl.scrollHeight;
+    };
+
+    es.onerror = () => {
+      logState.textContent = "Bağlantı: koptu (yeniden denenecek)";
+      es.close();
+      setTimeout(connectLogs, 1200);
+    };
+  } catch(e){
+    logState.textContent = "Bağlantı: başarısız";
+  }
+})();
+</script>
+</body>
+</html>

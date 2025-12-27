@@ -1,0 +1,120 @@
+=== ALT BAŞLIK DEBUG KAYDI ===
+
+🔹 Tarama Aralığı:
+   Başlangıç idx: 343 (Yıllar geçtikçe artan enerji talebi ve bu talebi karşılamadaki enerji arzının sınırlı olması, enerjiyi artık daha verimli kullanmayı kaçınılmaz hale getirmiştir. Bu bağlamda, enerji depolama sistemleri, enerji verimliliğini artırmanın ve enerji kaynaklarını sürdürebilir bir şekilde yönetmenin kritik bileşenlerinden biri olarak ön plana çıkmaktadır. Küresel düzeyde, nüfus artışı, sanayileşme ve yaşam standartlarındaki iyileşmeler enerji ihtiyacını sürekli olarak yükseltmektedir. Ancak, fosil yakıtlar gibi geleneksel enerji kaynaklarının tükenebilir olması ve çevresel etkilerinin büyük olması, sürdürülebilir enerji çözümlerine duyulan ihtiyacı daha da pekiştirmektedir  (Sharma ve Dewangan, 2022). Yenilenebilir enerji kaynaklarının (güneş, rüzgar, hidroelektrik vb.) sağladığı potansiyel oldukça büyük olsa da, bu kaynakların üretiminde süreklilik ve tahmin edilebilirlik eksiklikleri yaşanabilmektedir. Bu durum, enerjinin sürekli ve güvenilir bir şekilde temin edilmesinde zorluklar yaratmakta ve kesintisiz enerji arzını sağlayacak daha esnek çözümlere olan ihtiyacı ortaya koymaktadır. Enerji depolama sistemleri, bu noktada devreye girerek enerji üretimindeki dalgalanmaları dengeleyebilmekte ve fazla enerjinin depolanıp gerektiğinde kullanılmasını mümkün kılmaktadır. Bu sistemler yalnızca enerji verimliliğini artırmakla kalmaz, aynı zamanda çevre dostu ve sürdürülebilir bir enerji geleceği için önemli bir adım teşkil etmektedir.)
+   Bitiş idx: 460 (KAYNAKLAR)
+
+   Beklenen satır aralığı: 1.5
+   Heading styles (birebir): ['Heading 2', 'Heading 3', 'Heading 4']
+
+[345. paragraf] ALT BAŞLIK: 1.1. Enerji Depolamanın Önemi ve Yöntemleri
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[347. paragraf] ALT BAŞLIK: 1.2. Gizli Isı Enerji Depolama Sistemleri
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[354. paragraf] ALT BAŞLIK: 1.3. Çalışmanın Amacı ve Hedefi
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[356. paragraf] ALT BAŞLIK: Tez Bölüm İçerikleri
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[378. paragraf] ALT BAŞLIK: 2.1. FDM’lerin Tarihçesi ve Genel Bilgiler
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[382. paragraf] ALT BAŞLIK: 2.2. FDM Çeşitleri ve Sınıflandırılması
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): LEFT (0)
+
+[390. paragraf] ALT BAŞLIK: 2.2.1. FDM’lerin Erime Sıcaklıklarına Göre Kullanım Alanları
+  Style: Heading 3
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[397. paragraf] ALT BAŞLIK: 2.2.2. Termofiziksel Özelliklerine Göre FDM’ler
+  Style: Heading 3
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[399. paragraf] ALT BAŞLIK: 2.2.3. Ticari Olarak Yaygın Kullanılan FDM’ler
+  Style: Heading 3
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): JUSTIFY (3)
+
+[445. paragraf] ALT BAŞLIK: 7.1. Genel Değerlendirme ve Bulgular
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): LEFT (0)
+
+[451. paragraf] ALT BAŞLIK: 7.2. Öneriler ve Gelecek Çalışmalar için Yönlendirmeler
+  Style: Heading 2
+  Font (eff): Times New Roman
+  Size (eff): 12.0
+  Bold (eff): True
+  Line spacing (eff): 1.5
+  Before (eff): 18.0
+  After (eff): 18.0
+  Alignment (eff): LEFT (0)
+
+=== KONTROL TAMAMLANDI (11 alt başlık bulundu) ===
