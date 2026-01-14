@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/uguracar080/tez-kontrol
+  IMAGE_NAME: ghcr.io/uguracar080/tez_kontrol
 
 jobs:
   build-and-push:
