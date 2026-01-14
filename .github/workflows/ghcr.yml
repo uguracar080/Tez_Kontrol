@@ -11,7 +11,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}   # uguracar080/Tez_Kontrol
+  IMAGE_NAME: uguracar080/tez_kontrol   # uguracar080/Tez_Kontrol
 
 jobs:
   build-and-push:
