@@ -6,6 +6,7 @@ import uuid
 import shutil
 import yaml
 from datetime import datetime, timedelta
+import os
 
 import Tez_Kontrol as tez
 
@@ -44,6 +45,14 @@ def _safe_filename_part(s: str) -> str:
 
 
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
+@app.get("/version")
+async def version():
+    return {
+        "version": os.getenv("APP_VERSION", "dev"),
+        "sha": os.getenv("GIT_SHA", "unknown")[:7],
+        "build_time": os.getenv("BUILD_TIME", ""),
+    }
 
 
 @app.get("/")

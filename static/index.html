@@ -780,11 +780,31 @@
   </div>
 
 <script>
-const APP_VERSION = "V1.0";
+
 const API_URL = "/api/analyze";
 const LOG_STREAM_URL = "/api/logs/stream";
 
-document.getElementById("appVer").textContent = APP_VERSION;
+async function loadAppVersion(){
+  try{
+    const res = await fetch("/version", { cache: "no-store" });
+    const v = await res.json();
+    const ver = (v && v.version) ? String(v.version) : "dev";
+    const sha = (v && v.sha) ? String(v.sha) : "";
+    const bt  = (v && v.build_time) ? String(v.build_time) : "";
+
+    // Ekranda: v1.0.9 (78fb7d5)
+    const text = sha ? `${ver} (${sha})` : `${ver}`;
+    const el = document.getElementById("appVer");
+    if(el) el.textContent = text;
+
+    // İstersen tooltip:
+    if(el && bt) el.title = `Build: ${bt}`;
+  } catch(e){
+    // hata olursa sessizce geçsin
+  }
+}
+loadAppVersion();
+
 
 // Theme
 const THEME_KEY = "oku_theme";
@@ -906,7 +926,7 @@ function renderSideSummary(data){
   // Kategoriler (kategori toplam kuralına göre)
   const frontKeys = [
     "general","inner_cover","approval","ethics",
-    "abstract_en","acknowledgements","toc",
+    "abstract_tr","abstract_en","acknowledgements","toc",
     "list_of_tables","list_of_figures","symbols_abbreviations"
   ];
   const bodyKeys  = ["chapter_start"];

@@ -1,5 +1,13 @@
 FROM python:3.12-slim
 
+# --- Build-time metadata (GitHub Actions build-args ile dolar) ---
+ARG APP_VERSION=dev
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=""
+ENV APP_VERSION=${APP_VERSION}
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+
 # (ReportLab gibi paketler için sık kullanılan runtime kütüphaneleri)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6 \
