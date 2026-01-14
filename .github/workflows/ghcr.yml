@@ -35,6 +35,10 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.run_id }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
