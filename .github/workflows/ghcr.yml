@@ -10,22 +10,23 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/uguracar080/tez_kontrol
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # uguracar080/Tez_Kontrol
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
+      - name: Log in to GHCR (PAT)
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: uguracar080
           password: ${{ secrets.GHCR_PAT }}
 
@@ -35,4 +36,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+
