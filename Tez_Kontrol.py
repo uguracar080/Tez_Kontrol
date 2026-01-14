@@ -12152,34 +12152,65 @@ from reportlab.pdfbase.ttfonts import TTFont
 import os
 import re
 from datetime import datetime
+
 def init_turkish_pdf_fonts():
     """
-    Windows altında Arial TTF fontlarını kullanarak Türkçe karakter desteği sağlar.
-    Eğer fontlar yüklenemezse, Helvetica'ya geri döner.
+    Türkçe karakter desteği için TTF fontları PDF'ye gömer.
+    Öncelik:
+      1) Proje içi ./fonts/DejaVuSans*.ttf
+      2) Linux sistem fontları (Render)
+      3) Windows Arial (lokal)
+    Olmazsa Helvetica'ya düşer (Türkçe sorun çıkarabilir).
     """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import os
+
     normal_font_name = "Helvetica"
     bold_font_name = "Helvetica-Bold"
 
-    try:
-        # Windows varsayılan Arial font yolları
-        arial_path = r"C:\Windows\Fonts\arial.ttf"
-        arial_bold_path = r"C:\Windows\Fonts\arialbd.ttf"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
-        if os.path.exists(arial_path):
-            pdfmetrics.registerFont(TTFont("TR_ARIAL", arial_path))
-            normal_font_name = "TR_ARIAL"
+    candidates = [
+        # 1) Repo içi (önerilen)
+        (os.path.join(base_dir, "fonts", "DejaVuSans.ttf"),
+         os.path.join(base_dir, "fonts", "DejaVuSans-Bold.ttf"),
+         "TR_DJV", "TR_DJV_BOLD"),
 
-        if os.path.exists(arial_bold_path):
-            pdfmetrics.registerFont(TTFont("TR_ARIAL_BOLD", arial_bold_path))
-            bold_font_name = "TR_ARIAL_BOLD"
-        else:
-            # Kalın yoksa normal fontu kalın gibi kullan
-            bold_font_name = normal_font_name
+        # 2) Render / Linux'ta sık görülen sistem font yolları
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "TR_DJV", "TR_DJV_BOLD"),
 
-    except Exception as e:
-        print(f"Türkçe font yüklenemedi, Helvetica kullanılacak. Hata: {e}")
+        # 3) Windows (lokal)
+        (r"C:\Windows\Fonts\arial.ttf",
+         r"C:\Windows\Fonts\arialbd.ttf",
+         "TR_ARIAL", "TR_ARIAL_BOLD"),
+    ]
 
+    for normal_path, bold_path, n_name, b_name in candidates:
+        try:
+            if os.path.exists(normal_path):
+                pdfmetrics.registerFont(TTFont(n_name, normal_path))
+                normal_font_name = n_name
+
+                if os.path.exists(bold_path):
+                    pdfmetrics.registerFont(TTFont(b_name, bold_path))
+                    bold_font_name = b_name
+                else:
+                    bold_font_name = normal_font_name
+
+                # ✅ Başarılı yükledik → çık
+                return normal_font_name, bold_font_name
+        except Exception as e:
+            # sıradaki adaya geç
+            print(f"Font yükleme denemesi başarısız: {normal_path} -> {e}")
+
+    print("Türkçe font yüklenemedi, Helvetica kullanılacak. (Türkçe karakterler bozulabilir)")
     return normal_font_name, bold_font_name
+
+
+
 def wrap_text(text, font_name, font_size, max_width):
     """
     Verilen metni, font ve maksimum genişliğe göre satırlara böler.
