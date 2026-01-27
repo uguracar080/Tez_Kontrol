@@ -276,6 +276,7 @@ pages:
       space_before: 0
       space_after: 24
       no_italic: true
+      no_bold: true
 
     - check: approval_no_line_between_title_and_text
       description: "TEZ BAŞLIĞI satırından hemen sonra ONAY METNİ gelmeli (arada satır olmamalı)"
@@ -719,9 +720,9 @@ pages:
       bold: true
       all_caps: true
       alignment: center
-      line_spacing: 1
+      line_spacing: 1.5
       space_before: 0
-      space_after: 0
+      space_after: 24
       markers: ["^İÇİNDEKİLER$"]   # norm_tr zaten işaretleri sadeleştiriyor
 
     - check: toc_one_blank_with_format
@@ -783,7 +784,7 @@ pages:
         font_size_pt: 12
         bold: true
         alignment: right
-        line_spacing: 1
+        line_spacing: 1.0
         space_before: 0
         space_after: 0
 
@@ -1031,7 +1032,7 @@ pages:
 
 
   # ----------------------------------------------------------
-  # KAYNAKÇA
+  # KAYNAKLAR
   # ----------------------------------------------------------
   references:
     enabled: true
@@ -1048,3 +1049,34 @@ pages:
       space_before: 0
       space_after: 24
       debug: true
+
+  # ----------------------------------------------------------
+  # ÖZGEÇMİŞ
+  # ----------------------------------------------------------
+  cv:
+    enabled: true
+    rules:
+      - check: cv_heading_block
+        enabled: true
+        description: >
+          Tezin "ÖZGEÇMİŞ" başlığını sondan başa doğru arar (en sonda olmalı) ve
+          biçimsel olarak kontrol eder. ÖZ GEÇMİŞ / Özgeçmiş / Ozgecmis vb.
+          varyantları yakalar; ancak başlığın tam olarak "ÖZGEÇMİŞ"
+          şeklinde yazılması gerektiğini ihlal olarak raporlar.
+        accepted_variants:
+          - "ÖZ GEÇMİŞ"
+          - "Özgeçmiş"
+          - "OZGEÇMİŞ"
+          - "OZGECMIS"
+          - "ÖZGEÇMIS"
+        search_after_anchor: references_heading_idx
+        tail_nonempty_limit: 10
+        font_name: "Times New Roman"
+        font_size_pt: 12
+        bold: true
+        all_caps: true
+        alignment: "center"
+        line_spacing: 1.5
+        space_before: 0
+        space_after: 24
+        debug: true

@@ -2943,13 +2943,18 @@ def run_check(doc, paragraphs, check, rules_data):
         # ✅ yeni opsiyon: italik olmasın
         no_italic = bool(check.get("no_italic", False))
 
+        # ✅ yeni opsiyon: kalın olmasın
+        no_bold = bool(check.get("no_bold", False))
+
         rule_title = (
             f"TEZ BAŞLIĞI\n"
             f"{expected_name}, {int(expected_size)} punto, "
             f"{'BÜYÜK HARF' if must_be_upper else 'Normal'}, "
             f"{expected_align}, {expected_spacing} satır aralığı, "
             f"önce {int(expected_before)}, sonra {int(expected_after)}"
-            + ("; italik YOK" if no_italic else "")
+            + ("; italik & kalın font YOK" if no_italic else "")
+            + ("; " if no_bold else "")
+
         )
 
         # 1) Heading idx: memo öncelikli
@@ -2991,6 +2996,11 @@ def run_check(doc, paragraphs, check, rules_data):
                 # Word'de italik run'da None görünebilir; effective_italic bunu yakalar.
                 if no_italic and effective_italic(p):
                     errors.append("Tez başlığında italik karakter bulunmamalı")
+                    
+                # ✅ Bold yasaksa (EFFECTIVE)
+                if no_bold and effective_bold(p):
+                    errors.append("Tez başlığı kalın (bold) olmamalı")
+
 
                 # Alignment (effective)
                 align_map = {
@@ -3038,6 +3048,18 @@ def run_check(doc, paragraphs, check, rules_data):
 
         # 1) Tez başlığı idx (memo’dan)
         title_idx = memo.get("approval_title_idx")
+
+
+        def _preview(idx: int, take_words: int = 7, max_chars: int = 70) -> str:
+            if idx is None or idx < 0 or idx >= len(paragraphs):
+                return ""
+            txt = (paragraphs[idx].text or "").strip()
+            if not txt:
+                return ""
+            pv = " ".join(txt.split()[:take_words])
+            if len(pv) > max_chars:
+                pv = pv[:max_chars].rstrip() + "…"
+            return pv
 
         # 2) Onay metni idx (memo’dan, yoksa fallback arama)
         text_idx = memo.get("approval_text_idx")
@@ -3088,13 +3110,21 @@ def run_check(doc, paragraphs, check, rules_data):
             if text_idx != expected_idx:
                 # Aradaki satır sayısını raporlayalım (diagnostic için)
                 gap = text_idx - title_idx - 1
+                
+                title_pv = _preview(title_idx)
+                expected_pv = _preview(expected_idx)   # başlığın hemen altındaki satır (olması gereken onay metni)
+                actual_pv = _preview(text_idx)         # bulunan onay metni satırı      
+                          
                 results.append(
                     (
                         title_idx,
                         False,
-                        rule_title,
-                        f"Tez başlığı ile onay metni arasında {gap} satır var "
-                        f"(onay metni idx={text_idx}, beklenen idx={expected_idx})"
+                        rule_title,                       
+                        f"Tez başlığı sonrası ONAY METNİ hemen gelmeli; ancak arada {gap} satır var. "
+                        f"Başlık(idx={title_idx}): '{title_pv}' | "
+                        f"Beklenen satır(idx={expected_idx}): '{expected_pv}' | "
+                        f"Bulunan onay metni(idx={text_idx}): '{actual_pv}'"
+                        
                     )
                 )
             else:
@@ -3148,23 +3178,36 @@ def run_check(doc, paragraphs, check, rules_data):
 
             # Sonraki 2 paragraf boş mu ve formatı doğru mu?
             for k in range(1, 3):
-                if found_idx + k >= len(paragraphs):
-                    errors.append(f"{k}. satır eksik")
+                
+                idx_real = found_idx + k
+                loc = f"{k}. satır (belge:{idx_real})"
+
+                if idx_real >= len(paragraphs):
+                    errors.append(f"{k}. satır (belge:{idx_real}) — eksik")
                     continue
-                p = paragraphs[found_idx + k]
+                p = paragraphs[idx_real]
+                
+                txt = (p.text or "").strip()
+                pv = " ".join(txt.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
+                
+                
                 if not is_blank_para_text(p.text):
-                    errors.append(f"{k}. satır boş değil → '{(p.text or '').strip()[:20]}...'")
+                    errors.append(f"{loc} - boş değil (boş olmalı)")
 
                 ls = effective_line_spacing(p, default=expected_spacing)
                 if isinstance(ls, (int, float)) and round(float(ls), 2) != round(float(expected_spacing), 2):
-                    errors.append(f"{k}. satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}. satır aralığı {ls} yerine {expected_spacing} olmalı")
 
                 before_pt = effective_space_pt(p, "before")
                 after_pt  = effective_space_pt(p, "after")
                 if round(float(before_pt), 1) != round(float(expected_before), 1):
-                    errors.append(f"{k}. satır öncesi {before_pt} pt yerine {expected_before} pt olmalı")
+                    errors.append(f"{loc}. satır öncesi {before_pt} pt yerine {expected_before} pt olmalı")
                 if round(float(after_pt), 1) != round(float(expected_after), 1):
-                    errors.append(f"{k}. satır sonrası {after_pt} pt yerine {expected_after} pt olmalı")
+                    errors.append(f"{loc}. satır sonrası {after_pt} pt yerine {expected_after} pt olmalı")
 
             # ✅ 2 boşluktan sonra ilk içerik satırını memo’ya yaz
             j = found_idx + 1
@@ -3249,16 +3292,25 @@ def run_check(doc, paragraphs, check, rules_data):
                 for k, (idx, p) in enumerate(collected_sorted, start=1):
                     # 1) Satır boş olmamalı
                     if is_effectively_blank(p.text or ""):
-                        errors.append(f"{k}. satır boş olmamalı")
+                    
+                        # --- satır önizleme (ilk birkaç kelime)
+                        txt = (p.text or "").strip()
+                        pv = " ".join(txt.split()[:7])
+                        if len(pv) > 70:
+                            pv = pv[:70].rstrip() + "…"
+                        loc = f"{k}. satır (belge:{idx})" + (f" ('{pv}')" if pv else "")
+
+                        
+                        errors.append(f"{loc}. satır boş olmamalı")
                         continue
 
                     # 2) Font/punto (effective)
                     fn = effective_font_name(p)
                     fs = effective_font_size_pt(p)
                     if fn and fn != expected_name:
-                        errors.append(f"{k}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                        errors.append(f"{loc}. satır yazı tipi {fn} yerine {expected_name} olmalı")
                     if fs is not None and round(float(fs), 1) != round(float(expected_size), 1):
-                        errors.append(f"{k}. satır punto {fs} yerine {expected_size} olmalı")
+                        errors.append(f"{loc}. satır punto {fs} yerine {expected_size} olmalı")
 
                     # 3) Spacing (effective)
                     ls = effective_line_spacing(p, default=expected_spacing)
@@ -3266,14 +3318,14 @@ def run_check(doc, paragraphs, check, rules_data):
                     sa = effective_space_pt(p, "after")
 
                     if ls is not None and round(float(ls), 2) != round(float(expected_spacing), 2):
-                        errors.append(f"{k}. satırın satır aralığı {ls} yerine {expected_spacing} olmalı")
+                        errors.append(f"{loc}. satırın satır aralığı {ls} yerine {expected_spacing} olmalı")
                     if round(float(sb), 1) != round(float(expected_before), 1):
-                        errors.append(f"{k}. satır öncesi {sb} yerine {expected_before} olmalı")
+                        errors.append(f"{loc}. satır öncesi {sb} yerine {expected_before} olmalı")
                     if round(float(sa), 1) != round(float(expected_after), 1):
-                        errors.append(f"{k}. satır sonrası {sa} yerine {expected_after} olmalı")
+                        errors.append(f"{loc}. satır sonrası {sa} yerine {expected_after} olmalı")
 
                 if errors:
-                    results.append((authority_start, False, rule_title, "; ".join(errors)))
+                    results.append((authority_start, False, rule_title, "| ".join(errors)))
                 else:
                     results.append((authority_start, True, rule_title, ""))
 
@@ -3428,35 +3480,43 @@ def run_check(doc, paragraphs, check, rules_data):
 
             for k in range(1, 3):
                 idx = onay_son - k
+                loc = f"{k}. boşluk satırı (belge:{idx})"
+
                 if idx < 0:
-                    errors.append(f"{k}. boşluk satırı eksik")
+                    errors.append(f"{loc} — eksik")
                     continue
 
                 p = paragraphs[idx]
+                
+                txt = (p.text or "").strip()
+                pv = " ".join(txt.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
 
                 # 1) Satır boş olmalı
                 if not is_blank_para(p):
-                    errors.append(f"{k}. satır boş değil")
+                    errors.append(f"{loc} - boş değil")
                     continue
 
                 # 2) Biçim kontrolü (effective)
                 fn = effective_font_name(p)
                 fs = effective_font_size_pt(p)
                 if fn and fn != expected_name:
-                    errors.append(f"{k}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
                 if fs is not None and round(float(fs), 1) != round(float(expected_size), 1):
-                    errors.append(f"{k}. satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
 
                 ls = effective_line_spacing(p, default=expected_spacing)
                 sb = effective_space_pt(p, "before")
                 sa = effective_space_pt(p, "after")
 
                 if ls is not None and round(float(ls), 2) != round(float(expected_spacing), 2):
-                    errors.append(f"{k}. satır satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}- satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(float(sb), 1) != round(float(expected_before), 1):
-                    errors.append(f"{k}. satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                 if round(float(sa), 1) != round(float(expected_after), 1):
-                    errors.append(f"{k}. satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}- sonrası {sa} yerine {expected_after} olmalı")
 
             results.append(((onay_son - 2) if onay_son >= 2 else onay_son, len(errors) == 0, rule_title, "; ".join(errors)))
 
@@ -4439,12 +4499,23 @@ def run_check(doc, paragraphs, check, rules_data):
 
             # 5) İlk required_blank satırın biçimini kontrol et (varsa)
             for k in range(1, min(required_blank, blank_count) + 1):
+                
                 idx = heading_idx + k
+                loc = f"{k}. satır (belge:{idx})"
+
                 p = paragraphs[idx]
+                
+                txt_full = (p.text or "").replace("\u00A0", " ").strip()
+                pv = " ".join(txt_full.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
+                
 
                 # Boş olmalı
                 if (p.text or "").replace("\u00A0", " ").strip() != "":
-                    errors.append(f"{k}. satır boş değil")
+                    errors.append(f"{loc}- boş değil (boş olmalı)")
                     continue
 
                 # Format kontrolleri (paragraf formatı + run/stil)
@@ -4461,20 +4532,23 @@ def run_check(doc, paragraphs, check, rules_data):
                 sa = pf.space_after.pt if pf.space_after else 0.0
 
                 if fn and fn != expected_name:
-                    errors.append(f"{k}. boş satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
                 if fs and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{k}. boş satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
                 if ls is not None and round(float(ls), 2) != round(expected_spacing, 2):
-                    errors.append(f"{k}. boş satır satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}-satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{k}. boş satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{k}. boş satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}- sonrası {sa} yerine {expected_after} olmalı")
 
             # 6) Fazla boşluk ihlali (zinciri bozmaz)
             if blank_count > required_blank:
-                errors.append(f"Fazladan boş satır var (+{blank_count - required_blank})")
 
+                errors.append(
+                    f"Fazladan boş satır var (+{blank_count - required_blank}); "
+                    f"başlık sonrası boşluk sayısı={blank_count}, beklenen={required_blank}"
+                )
             if errors:
                 results.append((heading_idx, False, rule_title, "; ".join(errors)))
             else:
@@ -4638,10 +4712,19 @@ def run_check(doc, paragraphs, check, rules_data):
             # 5) İlk expected_blank_lines boş satır format kontrolü (varsa)
             for k in range(1, min(expected_blank_lines, blank_count) + 1):
                 idx = title_idx + k
+                loc = f"{k}. satır (belge:{idx})"
+                
                 p = paragraphs[idx]
+                
+                txt_full = (p.text or "").replace("\u00A0", " ").strip()
+                pv = " ".join(txt_full.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
 
                 if (p.text or "").replace("\u00A0", " ").strip() != "":
-                    errors.append(f"{k}. satır boş değil")
+                    errors.append(f"{loc}- boş değil  (boş olmalı)")
                     continue
 
                 fn = next((r.font.name for r in p.runs if r.font and r.font.name), None)
@@ -4657,19 +4740,24 @@ def run_check(doc, paragraphs, check, rules_data):
                 sa = pf.space_after.pt if pf.space_after else 0.0
 
                 if fn and fn != expected_name:
-                    errors.append(f"{k}. boş satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
                 if fs and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{k}. boş satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
                 if ls is not None and round(float(ls), 2) != round(expected_spacing, 2):
-                    errors.append(f"{k}. boş satır satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}- satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{k}. boş satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{k}. boş satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}-sonrası {sa} yerine {expected_after} olmalı")
 
             # 6) Fazladan boşluk ihlali (zinciri bozmaz)
             if blank_count > expected_blank_lines:
-                errors.append(f"Fazladan boş satır var (+{blank_count - expected_blank_lines})")
+
+                errors.append(
+                    f"Fazladan boş satır var (+{blank_count - expected_blank_lines}); "
+                    f"başlangıç idx={title_idx}, boşluk sayısı={blank_count}"
+                )
+
 
             if errors:
                 results.append((title_idx, False, rule_title, "; ".join(errors)))
@@ -4826,10 +4914,19 @@ def run_check(doc, paragraphs, check, rules_data):
             # 4) İlk N boş satır format kontrolü (varsa)
             for k in range(1, min(expected_blank_lines, blank_count) + 1):
                 idx = author_idx + k
+                loc = f"{k}. satır (belge:{idx})"
+                
                 p = paragraphs[idx]
+                
+                txt_full = (p.text or "").replace("\u00A0", " ").strip()
+                pv = " ".join(txt_full.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
 
                 if (p.text or "").replace("\u00A0", " ").strip() != "":
-                    errors.append(f"{k}. satır boş değil")
+                    errors.append(f"{loc} boş değil")
                     continue
 
                 fn = next((r.font.name for r in p.runs if r.font and r.font.name), None)
@@ -4845,15 +4942,15 @@ def run_check(doc, paragraphs, check, rules_data):
                 sa = pf.space_after.pt if pf.space_after else 0.0
 
                 if fn and fn != expected_name:
-                    errors.append(f"{k}. boş satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
                 if fs and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{k}. boş satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
                 if ls is not None and round(float(ls), 2) != round(expected_spacing, 2):
-                    errors.append(f"{k}. boş satır satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}- satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{k}. boş satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{k}. boş satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}- sonrası {sa} yerine {expected_after} olmalı")
 
             # 5) Fazla boşluk ihlali (zinciri bozmaz)
             if blank_count > expected_blank_lines:
@@ -4895,16 +4992,23 @@ def run_check(doc, paragraphs, check, rules_data):
             for k in range(expected_lines):
                 idx = start_idx + k
                 line_no = k + 1  # 1-based
+                loc = f"{line_no}. satır (belge:{idx})"
 
                 if idx >= len(paragraphs):
                     # satır yoksa: opsiyonelse geç, değilse hata
                     if line_no in optional_lines:
                         continue
-                    errors.append(f"{line_no}. satır eksik (program/danışman bloğu)")
+                    errors.append(f"{loc}- eksik (program/danışman bloğu)")
                     continue
 
                 p = paragraphs[idx]
                 raw = (p.text or "").replace("\u00A0", " ").strip()
+                
+                pv = " ".join(raw.split()[:7])
+                if len(pv) > 70:
+                    pv = pv[:70].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
 
                 # opsiyonel satır tamamen boşsa sorun değil
                 if line_no in optional_lines and raw == "":
@@ -4912,7 +5016,7 @@ def run_check(doc, paragraphs, check, rules_data):
 
                 # boş olmaması bekleniyor (opsiyonel değilse)
                 if raw == "" and (line_no not in optional_lines):
-                    errors.append(f"{line_no}. satır boş olmamalı")
+                    errors.append(f"{loc}- boş olmamalı")
                     continue
 
                 # Font/punto (run + style zinciri)
@@ -4924,9 +5028,9 @@ def run_check(doc, paragraphs, check, rules_data):
                     fs = p.style.font.size.pt
 
                 if fn and fn != expected_name:
-                    errors.append(f"{line_no}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
                 if fs and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{line_no}. satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
 
                 # Bold
                 if expected_bold:
@@ -4934,7 +5038,7 @@ def run_check(doc, paragraphs, check, rules_data):
                     if not any_bold and p.style and p.style.font and getattr(p.style.font, "bold", None):
                         any_bold = True
                     if not any_bold:
-                        errors.append(f"{line_no}. satır kalın değil")
+                        errors.append(f"{loc}- kalın değil")
 
                 # Alignment (para + style fallback)
                 align_val = p.alignment
@@ -4942,9 +5046,9 @@ def run_check(doc, paragraphs, check, rules_data):
                     align_val = p.style.paragraph_format.alignment
 
                 if expected_align == "center" and align_val != WD_PARAGRAPH_ALIGNMENT.CENTER:
-                    errors.append(f"{line_no}. satır ortalı değil")
+                    errors.append(f"{loc}- ortalı değil")
                 elif expected_align == "left" and align_val != WD_PARAGRAPH_ALIGNMENT.LEFT:
-                    errors.append(f"{line_no}. satır sola yaslı değil")
+                    errors.append(f"{loc}- sola yaslı değil")
 
                 # Satır aralığı / boşluklar
                 pf = p.paragraph_format
@@ -4952,11 +5056,11 @@ def run_check(doc, paragraphs, check, rules_data):
                 sb = pf.space_before.pt if pf.space_before else 0.0
                 sa = pf.space_after.pt if pf.space_after else 0.0
                 if ls is not None and round(float(ls), 2) != round(expected_spacing, 2):
-                    errors.append(f"{line_no}. satır satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}- satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{line_no}. satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{line_no}. satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}- sonrası {sa} yerine {expected_after} olmalı")
 
             # memo: program bloğu aralığı
             memo["abstract_tr_program_block_start_idx"] = start_idx
@@ -5393,6 +5497,50 @@ def run_check(doc, paragraphs, check, rules_data):
             cleaned = cleaned.replace(".", "").replace("…", "").replace("-", "")
             return cleaned.strip() == ""
 
+        
+        from docx.oxml.ns import qn
+        def _get_effective_alignment(p, doc):
+            """
+            Return WD_PARAGRAPH_ALIGNMENT value or None if not determinable.
+            Priority: direct pPr/jc -> style chain -> docDefaults -> None
+            """
+
+            # 1) Direct formatting on paragraph: <w:pPr><w:jc w:val="both"/>
+            pPr = p._p.pPr
+            if pPr is not None and pPr.jc is not None and pPr.jc.val is not None:
+                return pPr.jc.val  # this is already an enum-like value in python-docx
+
+            # 2) Style chain (basedOn)
+            style = p.style
+            visited = set()
+            while style is not None and style.style_id not in visited:
+                visited.add(style.style_id)
+
+                pf = style.paragraph_format
+                if pf is not None and pf.alignment is not None:
+                    return pf.alignment
+
+                style = style.base_style
+
+            # 3) docDefaults in styles.xml (paragraph defaults)
+            # document.styles.element is <w:styles> root
+            styles_elm = doc.styles.element
+            docDefaults = styles_elm.find(qn('w:docDefaults'))
+            if docDefaults is not None:
+                pPrDefault = docDefaults.find(qn('w:pPrDefault'))
+                if pPrDefault is not None:
+                    pPr = pPrDefault.find(qn('w:pPr'))
+                    if pPr is not None:
+                        jc = pPr.find(qn('w:jc'))
+                        if jc is not None:
+                            val = jc.get(qn('w:val'))
+                            # map common Word values to python-docx enum if you want;
+                            # but often comparing string works too (e.g., "both")
+                            return val  # "both", "left", "right", "center", "distribute", etc.
+
+            return None
+
+
         # 1) Başlangıç: memo’dan al
         start_idx = memo.get("abstract_tr_after_pageinfo_first_content_idx")
         if not isinstance(start_idx, int) or start_idx < 0 or start_idx >= len(paragraphs):
@@ -5434,6 +5582,17 @@ def run_check(doc, paragraphs, check, rules_data):
                 if is_effectively_blank(p.text):
                     continue
 
+                # --- Hata mesajı için: "satır" + ilk birkaç kelime önizleme (yeni fonksiyon yazmadan, burada çözüm) ---
+                _t = clean_compact(p.text)
+                _w = _t.split()
+                _pv = " ".join(_w[:7])
+                if len(_pv) > 60:
+                    _pv = _pv[:60].rstrip()
+                if _t and len(_t) > len(_pv):
+                    _pv += "…"
+                loc = f"{j}. satır" + (f" ('{_pv}')" if _pv else "")
+                # --------------------------------------------------------------------------------------------------
+
                 # Font/punto (run + style)
                 fn = next((r.font.name for r in p.runs if r.font and r.font.name), None)
                 fs = next((r.font.size.pt for r in p.runs if r.font and r.font.size), None)
@@ -5443,9 +5602,9 @@ def run_check(doc, paragraphs, check, rules_data):
                     fs = p.style.font.size.pt
 
                 if fn and fn != expected_name:
-                    errors.append(f"{j}. paragraf yazı tipi {fn} (beklenen: {expected_name})")
+                    errors.append(f"{loc} — yazı tipi {fn} (beklenen: {expected_name})")
                 if fs is not None and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{j}. paragraf punto {fs} (beklenen: {expected_size})")
+                    errors.append(f"{loc} — punto {fs} (beklenen: {expected_size})")
 
                 # Satır aralığı / boşluklar
                 pf = p.paragraph_format
@@ -5454,23 +5613,29 @@ def run_check(doc, paragraphs, check, rules_data):
                 sa = pf.space_after.pt  if pf.space_after  else 0.0
 
                 if ls is not None and round(float(ls), 2) != round(expected_spacing, 2):
-                    errors.append(f"{j}. paragraf satır aralığı {ls} (beklenen: {expected_spacing})")
+                    errors.append(f"{loc} — satır aralığı {ls} (beklenen: {expected_spacing})")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{j}. paragraf öncesi {sb} (beklenen: {expected_before})")
+                    errors.append(f"{loc} — öncesi {sb} (beklenen: {expected_before})")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{j}. paragraf sonrası {sa} (beklenen: {expected_after})")
+                    errors.append(f"{loc} — sonrası {sa} (beklenen: {expected_after})")
 
-                # Justify (iki yana yaslı) – style fallback
-                align_val = p.alignment
-                if align_val is None and p.style and p.style.paragraph_format:
-                    align_val = p.style.paragraph_format.alignment
-                if align_val != WD_PARAGRAPH_ALIGNMENT.JUSTIFY:
-                    errors.append(f"{j}. paragraf iki yana yaslı değil")
+                # Justify (iki yana yaslı) – effective (direct + style chain + docDefaults)
+                align_val = _get_effective_alignment(p, doc)
+
+                # python-docx enum gelirse: WD_PARAGRAPH_ALIGNMENT.JUSTIFY ile kıyaslanır
+                # docDefaults'tan string gelirse: "both" Word'de justify demektir.
+                is_justify = (align_val == WD_PARAGRAPH_ALIGNMENT.JUSTIFY) or (str(align_val).lower() in {"both", "distribute"})
+
+
+                if align_val is not None and not is_justify:
+                    errors.append(f"{loc} — iki yana yaslı değil")
+
 
             if errors:
                 results.append((start_idx, False, rule_title, "; ".join(errors)))
             else:
                 results.append((start_idx, True, rule_title, ""))
+
 
     # ======================================================
     # TÜRKÇE ÖZET - ANAHTAR KELİMELER SATIRI
@@ -5669,7 +5834,6 @@ def run_check(doc, paragraphs, check, rules_data):
                 results.append((idx, True, rule_title, ""))
 
 
-    # ===============================================================================================================#
     # ===============================================================================================================#    
     # ===============================================================================================================#
     # ======================================================
@@ -6145,22 +6309,24 @@ def run_check(doc, paragraphs, check, rules_data):
                 else:
                     results.append((title_idx, True, rule_title, ""))
 
+
     # ======================================================
     # ABSTRACT Sonrası Tez Yazarının Adı Soyadı
     # ======================================================
     elif check["check"] == "abstract_en_author_name":
-        expected_name = check.get("font_name", "Times New Roman")
-        expected_size = float(check.get("font_size_pt", 12))
-        expected_spacing = float(check.get("line_spacing", 1.0))
-        expected_before = float(check.get("space_before", 0))
-        expected_after = float(check.get("space_after", 0))
-        must_bold = check.get("bold", True)
-        must_center = check.get("align", "center") == "center"
-        must_upper = check.get("uppercase", True)
+        expected_name = check.get("font_name", "Times New Roman")          # Beklenen yazı tipi
+        expected_size = float(check.get("font_size_pt", 12))              # Beklenen punto
+        expected_spacing = float(check.get("line_spacing", 1.0))          # Beklenen satır aralığı
+        expected_before = float(check.get("space_before", 0))             # Beklenen paragraf öncesi boşluk
+        expected_after = float(check.get("space_after", 0))               # Beklenen paragraf sonrası boşluk
+        must_bold = check.get("bold", True)                               # Kalın olmalı mı?
+        must_center = check.get("align", "center") == "center"            # Ortalı olmalı mı?
+        must_upper = check.get("uppercase", True)                         # Büyük harf olmalı mı?
 
         import re
 
         def clean(s: str) -> str:
+            # Boşluk/tab/nbsp temizliği + çoklu boşlukları tek boşluğa indirgeme
             return " ".join((s or "").replace("\u00A0", " ").replace("\t", " ").strip().split())
 
         # ✅ Heading idx: memo öncelikli
@@ -6177,6 +6343,7 @@ def run_check(doc, paragraphs, check, rules_data):
                 if heading_idx is not None:
                     break
 
+        # Rapor satırında gözükecek kural açıklaması
         rule_title = (
             f"Tez yazarı adı-soyadı: {expected_name}, {int(expected_size)} punto, "
             f"{'kalın' if must_bold else 'normal'}, {'ortalı' if must_center else 'sol'}, "
@@ -6207,18 +6374,48 @@ def run_check(doc, paragraphs, check, rules_data):
                 p = paragraphs[author_idx]
                 errors = []
 
+                # Satır boş mu?
                 if not clean(p.text):
                     errors.append("Tez yazarı satırı boş")
 
-                # Büyük harf kontrolü (normalize ederek) — KORUNDU
+                # ======================================================
+                # Büyük harf kontrolü (Türkçe karakter normalize + ALL CAPS desteği)  ✅ GÜNCELLENDİ
+                # ======================================================
                 def norm_tr(s: str) -> str:
-                    trans = str.maketrans({
-                        "ı":"i","İ":"i","ç":"c","Ç":"c","ğ":"g","Ğ":"g",
-                        "ö":"o","Ö":"o","ş":"s","Ş":"s","ü":"u","Ü":"u"
-                    })
+                    # Türkçe karakterleri ASCII karşılıklarına indirger (İ/ı dahil) -> karşılaştırmayı stabil yapar
+                    trans = str.maketrans({"ı":"I","i":"İ","ç":"Ç","ğ":"Ğ","ö":"Ö","ş":"Ş","ü":"Ü"})
                     return (s or "").translate(trans)
 
-                if must_upper and clean(p.text) != norm_tr(clean(p.text)).upper():
+                def is_effectively_all_caps(para, txt_clean: str) -> bool:
+                    """
+                    Metin "efektif" olarak büyük harf mi?
+                    1) Metin gerçekten büyük harf (normalize edilmiş karşılaştırma ile)
+                    2) Word'de ALL CAPS biçimi (run veya style) açık
+                    """
+                    if not txt_clean:
+                        return False
+
+                    # 1) Metin düzeyinde büyük harf kontrolü (normalize edilmiş metin üzerinde)
+                    if norm_tr(txt_clean) == norm_tr(txt_clean).upper():
+                        return True
+
+                    # 2) Run bazında ALL CAPS kontrolü
+                    for r in para.runs:
+                        if (r.text or "").strip() and r.font and r.font.all_caps:
+                            return True
+
+                    # 3) Stil zinciri üzerinden ALL CAPS kontrolü
+                    s = para.style
+                    while s is not None:
+                        if s.font and s.font.all_caps:
+                            return True
+                        s = getattr(s, "base_style", None)
+
+                    return False
+
+                txt = clean(p.text)
+
+                if must_upper and not is_effectively_all_caps(p, txt):
                     errors.append("Tez yazarı adı-soyadı büyük harflerle yazılmamış")
 
                 # Yazı tipi
@@ -6270,6 +6467,7 @@ def run_check(doc, paragraphs, check, rules_data):
                 if round(sa, 1) != round(expected_after, 1):
                     errors.append(f"Paragraf sonrası {sa} yerine {expected_after} olmalı")
 
+                # Sonuç
                 if errors:
                     results.append((author_idx, False, rule_title, "; ".join(errors)))
                 else:
@@ -6458,21 +6656,30 @@ def run_check(doc, paragraphs, check, rules_data):
                 # ✅ expected_lines kadar satır kontrol et (opsiyonel satır mantığı korunur)
                 for line_num in range(1, expected_lines + 1):
                     idx = start_idx + line_num - 1
+                    loc = f"{line_num}. satır (belge:{idx})"
+                    
                     if idx >= len(paragraphs):
                         if line_num in optional_lines:
                             continue
-                        errors.append(f"{line_num}. satır yok")
+                        errors.append(f"{loc}- yok")
                         continue
 
                     p = paragraphs[idx]
+                    
+                    raw = clean(p.text)
+                    pv = " ".join(raw.split()[:7])
+                    if len(pv) > 70:
+                        pv = pv[:70].rstrip() + "…"
+                    loc = loc + (f" ('{pv}')" if pv else "")
+
 
                     # Opsiyonel satır boş olabilir
                     if line_num in optional_lines and not clean(p.text):
                         continue
 
                     # Boş satır olamaz (opsiyonel hariç)
-                    if not clean(p.text):
-                        errors.append(f"{line_num}. satır boş")
+                    if not raw:
+                        errors.append(f"{loc}- boş")
                         continue
 
                     # Yazı tipi
@@ -6484,7 +6691,7 @@ def run_check(doc, paragraphs, check, rules_data):
                     if not fn and p.style and p.style.font and p.style.font.name:
                         fn = p.style.font.name
                     if fn and fn != expected_name:
-                        errors.append(f"{line_num}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                        errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
 
                     # Punto
                     fs = None
@@ -6495,7 +6702,7 @@ def run_check(doc, paragraphs, check, rules_data):
                     if not fs and p.style and p.style.font and p.style.font.size:
                         fs = p.style.font.size.pt
                     if fs and round(float(fs), 1) != round(expected_size, 1):
-                        errors.append(f"{line_num}. satır punto {fs} yerine {expected_size} olmalı")
+                        errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
 
                     # Satır aralığı ve boşluklar
                     pf = p.paragraph_format
@@ -6503,11 +6710,11 @@ def run_check(doc, paragraphs, check, rules_data):
                     sb = pf.space_before.pt if pf.space_before else 0.0
                     sa = pf.space_after.pt if pf.space_after else 0.0
                     if ls is not None and round(float(ls), 2) != expected_spacing:
-                        errors.append(f"{line_num}. satırın satır aralığı {ls} yerine {expected_spacing} olmalı")
+                        errors.append(f"{loc}- satır aralığı {ls} yerine {expected_spacing} olmalı")
                     if round(sb, 1) != round(expected_before, 1):
-                        errors.append(f"{line_num}. satır öncesi {sb} yerine {expected_before} olmalı")
+                        errors.append(f"{loc}- öncesi {sb} yerine {expected_before} olmalı")
                     if round(sa, 1) != round(expected_after, 1):
-                        errors.append(f"{line_num}. satır sonrası {sa} yerine {expected_after} olmalı")
+                        errors.append(f"{loc}- sonrası {sa} yerine {expected_after} olmalı")
 
                 # ✅ Bloğun bittiği ilk boş satırı tespit edip memo’ya yaz
                 # (Bundan sonrası spacing_after_program_block ve date/pages için anchor)
@@ -6996,26 +7203,37 @@ def run_check(doc, paragraphs, check, rules_data):
                 if txt == "":
                     continue
 
+                # --- Hata mesajı için: "satır" + ilk birkaç kelime önizleme (fonksiyon yazmadan, burada) ---
+                _t = txt
+                _w = _t.split()
+                _pv = " ".join(_w[:7])
+                if len(_pv) > 60:
+                    _pv = _pv[:60].rstrip()
+                if _t and len(_t) > len(_pv):
+                    _pv += "…"
+                loc = f"{k}. satır" + (f" ('{_pv}')" if _pv else "")
+                # ------------------------------------------------------------------------------------------------
+
                 # Font
                 fn = next((r.font.name for r in p.runs if r.font and r.font.name), None)
                 if not fn and p.style and p.style.font and p.style.font.name:
                     fn = p.style.font.name
                 if fn and fn != expected_name:
-                    errors.append(f"{k}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                    errors.append(f"{loc} — yazı tipi {fn} yerine {expected_name} olmalı")
 
                 # Size
                 fs = next((r.font.size.pt for r in p.runs if r.font and r.font.size), None)
                 if not fs and p.style and p.style.font and p.style.font.size:
                     fs = p.style.font.size.pt
                 if fs and round(float(fs), 1) != round(expected_size, 1):
-                    errors.append(f"{k}. satır punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc} — punto {fs} yerine {expected_size} olmalı")
 
-                # Justify (stil dahil)
+                # Justify (stil dahil) + (None ise false positive üretme)
                 align_val = p.alignment
-                if not align_val and p.style and p.style.paragraph_format and p.style.paragraph_format.alignment:
+                if align_val is None and p.style and p.style.paragraph_format:
                     align_val = p.style.paragraph_format.alignment
-                if align_val != WD_PARAGRAPH_ALIGNMENT.JUSTIFY:
-                    errors.append(f"{k}. satır iki yana yaslı değil")
+                if align_val is not None and align_val != WD_PARAGRAPH_ALIGNMENT.JUSTIFY:
+                    errors.append(f"{loc} — iki yana yaslı değil")
 
                 # Spacing
                 pf = p.paragraph_format
@@ -7023,11 +7241,11 @@ def run_check(doc, paragraphs, check, rules_data):
                 sb = pf.space_before.pt if pf.space_before else 0.0
                 sa = pf.space_after.pt if pf.space_after else 0.0
                 if ls is not None and round(float(ls), 2) != expected_spacing:
-                    errors.append(f"{k}. satırın satır aralığı {ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc} — satır aralığı {ls} yerine {expected_spacing} olmalı")
                 if round(sb, 1) != round(expected_before, 1):
-                    errors.append(f"{k}. satır öncesi {sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc} — öncesi {sb} yerine {expected_before} olmalı")
                 if round(sa, 1) != round(expected_after, 1):
-                    errors.append(f"{k}. satır sonrası {sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc} — sonrası {sa} yerine {expected_after} olmalı")
 
             if errors:
                 results.append((start_idx, False, rule_title, "; ".join(errors)))
@@ -7544,18 +7762,27 @@ def run_check(doc, paragraphs, check, rules_data):
         # --- Gövde paragraflarını tek tek kontrol et (ABSTRACT mantığı) ---
         errors = []
         for k in range(body_start, body_end + 1):
+            
+            loc = f"{k}. satır (belge:{k})"
+
             p = paragraphs[k]
             txt = clean(p.text)
             if txt == "":
                 continue
 
+            pv = " ".join(txt.split()[:10])  # gövde için 10 kelime daha iyi
+            if len(pv) > 90:
+                pv = pv[:90].rstrip() + "…"
+            loc = loc + (f" ('{pv}')" if pv else "")
+
+
             fn = effective_font_name(p)
             fs = effective_font_size_pt(p)
 
             if fn and fn != expected_name:
-                errors.append(f"{k}. satır yazı tipi {fn} yerine {expected_name} olmalı")
+                errors.append(f"{loc}- yazı tipi {fn} yerine {expected_name} olmalı")
             if fs is not None and round(float(fs), 1) != round(expected_size, 1):
-                errors.append(f"{k}. satır punto {fs} yerine {expected_size} olmalı")
+                errors.append(f"{loc}- punto {fs} yerine {expected_size} olmalı")
 
             eff_align = effective_alignment(p)
             eff_ls    = effective_line_spacing(p)
@@ -7563,20 +7790,20 @@ def run_check(doc, paragraphs, check, rules_data):
             eff_sa    = effective_space_pt(p, "after")
 
             if expected_align == "justify" and eff_align != WD_PARAGRAPH_ALIGNMENT.JUSTIFY:
-                errors.append(f"{k}. satır iki yana yaslı değil")
+                errors.append(f"{loc}- iki yana yaslı değil")
             elif expected_align == "center" and eff_align != WD_PARAGRAPH_ALIGNMENT.CENTER:
-                errors.append(f"{k}. satır ortalı değil")
+                errors.append(f"{loc}- ortalı değil")
             elif expected_align == "left" and eff_align != WD_PARAGRAPH_ALIGNMENT.LEFT:
-                errors.append(f"{k}. satır sola dayalı değil")
+                errors.append(f"{loc}- sola dayalı değil")
             elif expected_align == "right" and eff_align != WD_PARAGRAPH_ALIGNMENT.RIGHT:
-                errors.append(f"{k}. satır sağa dayalı değil")
+                errors.append(f"{loc}- sağa dayalı değil")
 
             if isinstance(eff_ls, (int, float)) and abs(eff_ls - expected_spacing) > 0.1:
-                errors.append(f"{k}. satırın satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
+                errors.append(f"{loc}- satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
             if abs(eff_sb - expected_before) > 1:
-                errors.append(f"{k}. satır öncesi {eff_sb} yerine {expected_before} olmalı")
+                errors.append(f"{loc}- öncesi {eff_sb} yerine {expected_before} olmalı")
             if abs(eff_sa - expected_after) > 1:
-                errors.append(f"{k}. satır sonrası {eff_sa} yerine {expected_after} olmalı")
+                errors.append(f"{loc}- sonrası {eff_sa} yerine {expected_after} olmalı")
 
         if errors:
             results.append((body_start, False, rule_title, "; ".join(errors)))
@@ -7834,64 +8061,16 @@ def run_check(doc, paragraphs, check, rules_data):
 
         memo["toc_heading_idx"] = idx
 
-
     # ======================================================
-    # İÇİNDEKİLER – BAŞLIKTAN SONRA TAM 1 BOŞ SATIR (BİÇİMİYLE)
+    # İÇİNDEKİLER – BAŞLIKTAN SONRA BOŞ SATIR YOK (hemen 'Sayfa' satırı gelmeli)
     # ======================================================
     elif check["check"] == "toc_one_blank_with_format":
         import re
-        import xml.etree.ElementTree as ET
-        from collections import Counter
 
-        expected_name    = check.get("font_name", "Times New Roman")
-        expected_size    = float(check.get("font_size_pt", 12))
-        expected_spacing = float(check.get("line_spacing", 1.0))
-        expected_before  = float(check.get("space_before", 0))
-        expected_after   = float(check.get("space_after", 0))
-        markers          = check.get("markers", ["^İÇİNDEKİLER$"])
+        # Artık bu check'in amacı: 1 boş satır değil, 0 boş satır
+        markers = check.get("markers", ["^İÇİNDEKİLER$"])
 
-        rule_title = (
-            f"İÇİNDEKİLER – başlıktan sonra tam 1 boş satır: "
-            f"{expected_name}, {int(expected_size)} pt, {expected_spacing} satır, "
-            f"önce {int(expected_before)}, sonra {int(expected_after)}"
-        )
-
-        def norm_tr(s: str) -> str:
-            trans = str.maketrans({
-                "ı":"i","İ":"i","ç":"c","Ç":"c","ğ":"g","Ğ":"g",
-                "ö":"o","Ö":"o","ş":"s","Ş":"s","ü":"u","Ü":"u"
-            })
-            return (s or "").lower().translate(trans).strip()
-
-        def resolve_from_styles_pf(para, attr):
-            val = getattr(para.paragraph_format, attr)
-            if val is not None:
-                return val
-            s = para.style
-            while s is not None:
-                pf = getattr(s, "paragraph_format", None)
-                if pf is not None:
-                    v = getattr(pf, attr)
-                    if v is not None:
-                        return v
-                s = getattr(s, "base_style", None)
-            return None
-
-        def effective_line_spacing(para, default=1.0):
-            ls = resolve_from_styles_pf(para, "line_spacing")
-            if ls is None:
-                return float(default)
-            if hasattr(ls, "pt"):
-                return round(ls.pt, 1)
-            try:
-                return round(float(ls), 2)
-            except Exception:
-                return ls
-
-        def effective_space_pt(para, which: str) -> float:
-            attr = "space_before" if which == "before" else "space_after"
-            length = resolve_from_styles_pf(para, attr)
-            return 0.0 if length is None else round(length.pt, 1)
+        rule_title = "İÇİNDEKİLER – başlıktan sonra boş satır olmamalı (hemen 'Sayfa' satırı gelmeli)"
 
         def is_blank_para_text(txt: str) -> bool:
             if txt is None:
@@ -7899,76 +8078,41 @@ def run_check(doc, paragraphs, check, rules_data):
             t = txt.replace("\xa0", " ")
             return (t.strip() == "") or ("".join(t.split()) == "")
 
+        def norm_tr(s: str) -> str:
+            trans = str.maketrans({
+                "ı":"i","İ":"i","ç":"c","Ç":"c","ğ":"g","Ğ":"g",
+                "ö":"o","Ö":"o","ş":"s","Ş":"s","ü":"u","Ü":"u"
+            })
+            return (s or "").replace("\u00A0", " ").strip().lower().translate(trans)
+
         # --- TOC başlığını memo’dan al (en güvenlisi)
         toc_idx = memo.get("toc_heading_idx", None)
         if toc_idx is None:
-            # fallback: ack sonrası arama
-            ack_idx = memo.get("acknowledgements_heading_idx")
-            if ack_idx is None:
-                for i, p in enumerate(paragraphs):
-                    if re.match(r"^on\s*soz\s*/?\s*tesekkur$", norm_tr(p.text)):
-                        ack_idx = i
-                        memo["acknowledgements_heading_idx"] = i
-                        break
-            if ack_idx is None:
-                return [(0, False, rule_title, "ÖN SÖZ/TEŞEKKÜR başlığı bulunamadı; İÇİNDEKİLER konumu doğrulanamadı")]
+            return [(0, False, rule_title, "memo'da toc_heading_idx yok; önce 'toc_heading' çalışmalı")]
 
-            compiled = []
-            for m in markers:
-                try:
-                    compiled.append(re.compile(norm_tr(m), re.IGNORECASE))
-                except re.error:
-                    compiled.append(re.compile("^" + re.escape(norm_tr(m).strip("^$")) + "$", re.IGNORECASE))
-
-            for i in range(ack_idx + 1, len(paragraphs)):
-                norm = norm_tr((paragraphs[i].text or "").strip())
-                if any(pat.match(norm) for pat in compiled):
-                    toc_idx = i
-                    memo["toc_heading_idx"] = i
-                    break
-
-        if toc_idx is None:
-            return [(0, False, rule_title, "İÇİNDEKİLER başlığı bulunamadı")]
-
-        # --- başlıktan sonra boş say
         first_after = toc_idx + 1
         if first_after >= len(paragraphs):
             return [(toc_idx, False, rule_title, "Başlıktan sonra paragraf yok")]
 
-        blanks = 0
-        blank_idx = None
-        j = first_after
-        while j < len(paragraphs) and is_blank_para_text(paragraphs[j].text):
-            if blanks == 0:
-                blank_idx = j
-            blanks += 1
-            j += 1
+        # ✅ Yeni kural: başlıktan hemen sonra gelen satır boş olamaz
+        if is_blank_para_text(paragraphs[first_after].text):
+            # kaç tane boş var (mesajı zenginleştirmek için)
+            j = first_after
+            blanks = 0
+            while j < len(paragraphs) and is_blank_para_text(paragraphs[j].text):
+                blanks += 1
+                j += 1
+            return [(first_after, False, rule_title, f"Başlıktan sonra boş satır olmamalı (bulunan boş satır sayısı: {blanks})")]
 
-        errors = []
-        if blanks != 1:
-            errors.append(f"Başlıktan sonra tam 1 boş satır olmalı (bulunan: {blanks})")
+        # (Opsiyonel ama pratik) İlk satırın 'Sayfa' olduğunu burada kontrol etmek istiyorsan:
+        txt = (paragraphs[first_after].text or "").replace("\xa0", " ").strip()
+        core = re.sub(r"[^\w]+", "", norm_tr(txt))
+        if core not in ("sayfa", "page"):
+            # Biçimi zaten 'toc_page_label_line' kontrol ediyor; burada sadece konumu garanti ediyoruz.
+            return [(first_after, False, rule_title, f"Boş satır yok ama hemen sonra 'Sayfa' satırı gelmeli (bulunan: '{txt}')")]
 
-        if blanks >= 1 and blank_idx is not None:
-            bp = paragraphs[blank_idx]
+        return [(first_after, True, rule_title, "")]
 
-            # Font tespiti: boş paragrafta çoğu zaman gereksiz “tespit edilemedi” üretir.
-            # Bu yüzden boş paragrafta font/name kontrollerini ZORLAMAYIP,
-            # sadece spacing kontrolleriyle yetiniyoruz (Word çoğu zaman run içermez).
-            eff_ls = effective_line_spacing(bp, default=expected_spacing)
-            eff_sb = effective_space_pt(bp, "before")
-            eff_sa = effective_space_pt(bp, "after")
-
-            if isinstance(eff_ls, (int, float)) and abs(eff_ls - expected_spacing) > 0.1:
-                errors.append(f"Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
-            if abs(eff_sb - expected_before) > 1:
-                errors.append(f"Paragraf öncesi {eff_sb} yerine {expected_before} olmalı")
-            if abs(eff_sa - expected_after) > 1:
-                errors.append(f"Paragraf sonrası {eff_sa} yerine {expected_after} olmalı")
-
-            return [(blank_idx, len(errors) == 0, rule_title, "; ".join(errors))]
-
-        msg = "; ".join(errors) if errors else "Boş satır yok"
-        return [(toc_idx, False, rule_title, msg)]
 
     # ======================================================
     # İÇİNDEKİLER – 'Sayfa' satırı (başlıktan sonra tarayarak bulur)
@@ -8557,9 +8701,17 @@ def run_check(doc, paragraphs, check, rules_data):
 
         if end_idx is not None:
             for j in range(start, end_idx):
+                
+                loc = f"{j}. satır (belge:{j})"
+                
                 p = paragraphs[j]
                 txt = (p.text or "").replace("\xa0", " ").strip()
                 if txt == "":
+                    pv = " ".join(txt.split()[:10])
+                    if len(pv) > 90:
+                        pv = pv[:90].rstrip() + "…"
+                    loc = loc + (f" ('{pv}')" if pv else "")
+
                     continue
 
                 eff_align = effective_alignment(p)
@@ -8573,23 +8725,23 @@ def run_check(doc, paragraphs, check, rules_data):
 
                 # spacing
                 if isinstance(eff_ls,(int,float)) and abs(eff_ls - expected_spacing) > 0.1:
-                    errors.append(f"{j}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
+                    errors.append(f"{loc}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
                 if abs(eff_sb - expected_before) > 1:
-                    errors.append(f"{j}: Öncesi {eff_sb} yerine {expected_before} olmalı")
+                    errors.append(f"{loc}: Öncesi {eff_sb} yerine {expected_before} olmalı")
                 if abs(eff_sa - expected_after) > 1:
-                    errors.append(f"{j}: Sonrası {eff_sa} yerine {expected_after} olmalı")
+                    errors.append(f"{loc}: Sonrası {eff_sa} yerine {expected_after} olmalı")
 
                 # FONT: artık theme + hyperlink/field uyumlu
                 fn_eff = effective_font_name(p)
                 if fn_eff is None:
-                    errors.append(f"{j}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
+                    errors.append(f"{loc}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
                 else:
                     if re.sub(r"\s+","",fn_eff.lower()) != re.sub(r"\s+","",expected_name.lower()):
                         errors.append(f"{j}: Yazı tipi {fn_eff} yerine {expected_name} olmalı")
 
                 fs = para_font_size_pt(p)
                 if fs is not None and round(float(fs),1) != round(expected_size,1):
-                    errors.append(f"{j}: Punto {fs} yerine {expected_size} olmalı")
+                    errors.append(f"{loc}: Punto {fs} yerine {expected_size} olmalı")
 
                 checked += 1
 
@@ -9249,11 +9401,18 @@ def run_check(doc, paragraphs, check, rules_data):
         checked = 0
 
         for j in body_p_indices:
+            loc = f"{j}. satır (belge:{j})"
+
             if j is None or j < 0 or j >= len(paragraphs):
                 continue
             p = paragraphs[j]
             txt = (p.text or "").replace("\xa0", " ").strip()
             if txt == "":
+                pv = " ".join(txt.split()[:10])
+                if len(pv) > 90:
+                    pv = pv[:90].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
                 continue
 
             # --- HİZALAMA: çoklu kaynak + LOT için varsayılan LEFT ---
@@ -9273,22 +9432,22 @@ def run_check(doc, paragraphs, check, rules_data):
 
             # --- Biçimsel kurallar ---
             if expected_align == "left" and eff_align != WD_PARAGRAPH_ALIGNMENT.LEFT:
-                errors.append(f"{j}: Paragraf sola yaslı değil")
+                errors.append(f"{loc}: Paragraf sola yaslı değil")
             if isinstance(eff_ls, (int, float)) and abs(eff_ls - expected_spacing) > 0.1:
-                errors.append(f"{j}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
+                errors.append(f"{loc}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
             if abs(eff_sb - expected_before) > 1:
-                errors.append(f"{j}: Öncesi {eff_sb} yerine {expected_before} olmalı")
+                errors.append(f"{loc}: Öncesi {eff_sb} yerine {expected_before} olmalı")
             if abs(eff_sa - expected_after) > 1:
-                errors.append(f"{j}: Sonrası {eff_sa} yerine {expected_after} olmalı")
+                errors.append(f"{loc}: Sonrası {eff_sa} yerine {expected_after} olmalı")
 
             exp_norm = norm_font(expected_name)
             act_norm = norm_font(eff_name) if eff_name else None
             if act_norm is None:
-                errors.append(f"{j}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
+                errors.append(f"{loc}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
             elif act_norm != exp_norm:
-                errors.append(f"{j}: Yazı tipi {eff_name} yerine {expected_name} olmalı")
+                errors.append(f"{loc}: Yazı tipi {eff_name} yerine {expected_name} olmalı")
             if fs is not None and round(float(fs),1) != round(expected_size,1):
-                errors.append(f"{j}: Punto {fs} yerine {expected_size} olmalı")
+                errors.append(f"{loc}: Punto {fs} yerine {expected_size} olmalı")
 
             # --- debug satırı (nihai align ile) ---
             if debug_enabled:
@@ -9922,11 +10081,18 @@ def run_check(doc, paragraphs, check, rules_data):
         checked = 0
 
         for j in body_p_indices:
+            loc = f"{j}. satır (belge:{j})"
+            
             if j is None or j < 0 or j >= len(paragraphs):
                 continue
             p = paragraphs[j]
             txt = (p.text or "").replace("\xa0", " ").strip()
             if txt == "":
+                pv = " ".join(txt.split()[:10])
+                if len(pv) > 90:
+                    pv = pv[:90].rstrip() + "…"
+                loc = loc + (f" ('{pv}')" if pv else "")
+
                 continue
 
             eff_align = effective_alignment(p) or align_from_p_el(p._element)
@@ -9942,22 +10108,22 @@ def run_check(doc, paragraphs, check, rules_data):
             fs        = para_font_size_pt(p)
 
             if expected_align == "left" and eff_align != WD_PARAGRAPH_ALIGNMENT.LEFT:
-                errors.append(f"{j}: Paragraf sola yaslı değil")
+                errors.append(f"{loc}: Paragraf sola yaslı değil")
             if isinstance(eff_ls, (int, float)) and abs(eff_ls - expected_spacing) > 0.1:
-                errors.append(f"{j}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
+                errors.append(f"{loc}: Satır aralığı {eff_ls} yerine {expected_spacing} olmalı")
             if abs(eff_sb - expected_before) > 1:
-                errors.append(f"{j}: Öncesi {eff_sb} yerine {expected_before} olmalı")
+                errors.append(f"{loc}: Öncesi {eff_sb} yerine {expected_before} olmalı")
             if abs(eff_sa - expected_after) > 1:
-                errors.append(f"{j}: Sonrası {eff_sa} yerine {expected_after} olmalı")
+                errors.append(f"{loc}: Sonrası {eff_sa} yerine {expected_after} olmalı")
 
             exp_norm = norm_font(expected_name)
             act_norm = norm_font(eff_name) if eff_name else None
             if act_norm is None:
-                errors.append(f"{j}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
+                errors.append(f"{loc}: Yazı tipi tespit edilemedi; {expected_name} olmalı")
             elif act_norm != exp_norm:
-                errors.append(f"{j}: Yazı tipi {eff_name} yerine {expected_name} olmalı")
+                errors.append(f"{loc}: Yazı tipi {eff_name} yerine {expected_name} olmalı")
             if fs is not None and round(float(fs),1) != round(expected_size,1):
-                errors.append(f"{j}: Punto {fs} yerine {expected_size} olmalı")
+                errors.append(f"{loc}: Punto {fs} yerine {expected_size} olmalı")
 
             if debug_enabled:
                 preview = txt.replace("\n", " ")
@@ -11058,7 +11224,21 @@ def run_check(doc, paragraphs, check, rules_data):
         expected_align   = (check.get("alignment", "left") or "left").lower().strip()
         debug_mode       = check.get("debug", False)
 
-        caption_pat = re.compile(r"^(şek(il)?\.?)\s*\d+(\.\d+)*\s+.+", re.IGNORECASE)
+        
+        # 1) Detect: yanlış nokta / : / - olsa bile caption olarak yakala
+        caption_detect_pat = re.compile(
+            r"^(şekil|şek\.?|şekil\.?)\s*\d+(?:\.\d+)*\s*(?:[.:\-–])?\s+.+",
+            re.IGNORECASE
+        )
+
+        # 2) Strict: beklenen doğru format = "Şekil X.Y Başlık"
+        # - X.Y zorunlu
+        # - Y’den sonra nokta, ':' veya '-' olmayacak
+        caption_strict_pat = re.compile(
+            r"^(şekil|şek\.?|şekil\.?)\s*\d+\.\d+\s+.+",
+            re.IGNORECASE
+        )
+
 
         rule_title = (
             f"Şekil Başlıkları (Tez Metni İçinde)\n"
@@ -11184,16 +11364,16 @@ def run_check(doc, paragraphs, check, rules_data):
             # 1) Alt caption yoksa
             if cap_idx is None or cap_idx >= end_idx:
                 # Üstte caption yazılmışsa özellikle belirt
-                if up_idx is not None and up_idx >= start_idx and caption_pat.match(up_text):
+                if up_idx is not None and up_idx >= start_idx and caption_detect_pat.match(up_text):
                     err(short_text(up_text), "Şekil başlığı şeklin ÜSTÜNDE yazılmış. Kılavuza göre başlık şeklin ALTINDA olmalı.")
                 else:
                     err("Şekil nesnesi", "Şekil bulundu ancak altında 'Şekil X.Y ...' başlığı bulunamadı.")
                 continue
 
             # 2) Alt paragraf caption değilse
-            if not caption_pat.match(down_text):
+            if not caption_detect_pat.match(down_text):
                 # Üstte caption varsa özellikle belirt
-                if up_idx is not None and up_idx >= start_idx and caption_pat.match(up_text):
+                if up_idx is not None and up_idx >= start_idx and caption_detect_pat.match(up_text):
                     err(short_text(up_text), "Şekil başlığı şeklin ÜSTÜNDE yazılmış. Kılavuza göre başlık şeklin ALTINDA olmalı.")
                 else:
                     err(short_text(down_text), "Şekil nesnesinin hemen altında geçerli 'Şekil X.Y ...' başlığı yok.")
@@ -11209,6 +11389,12 @@ def run_check(doc, paragraphs, check, rules_data):
 
             fn, fs, ls, sb, sa, al, st = dbg_para_props(paragraphs[cap_idx])
             head = short_text(down_text)
+            
+            # Caption yakalandı ama beklenen "Şekil X.Y Başlık" formatında değilse ihlal yaz
+            if not caption_strict_pat.match(down_text):
+                err(head, "Şekil başlığı numaralandırma formatı hatalı. Beklenen: 'Şekil X.Y Başlık' "
+                        "(Y’den sonra nokta, ':' veya '-' kullanılmamalı).")
+
 
             if debug_file:
                 debug_file.write(f"Nesne idx={i+1} → caption idx={cap_idx+1}\n")
@@ -11363,7 +11549,22 @@ def run_check(doc, paragraphs, check, rules_data):
             return (s or "").lower().translate(trans).strip()
 
         # Daha güvenli: numaradan sonra metin olsun
-        caption_pat = re.compile(r"^cizelge\s*\d+(\.\d+)*\s+.+", re.IGNORECASE)
+
+        
+        # 1) Detect: yanlış nokta / : / - olsa bile caption olarak yakala
+        table_caption_detect_pat = re.compile(
+            r"^cizelge\s*\d+(?:\.\d+)*\s*(?:[.:\-–])?\s+.+",
+            re.IGNORECASE
+        )
+
+        # 2) Strict: beklenen doğru format = "Çizelge X.Y Başlık"
+        # - X.Y zorunlu
+        # - Y’den sonra nokta, ':' veya '-' olmayacak
+        table_caption_strict_pat = re.compile(
+            r"^cizelge\s*\d+\.\d+\s+.+",
+            re.IGNORECASE
+)
+
 
         # =====================================================
         # 🔹 Tarama sınırları (memo öncelikli)
@@ -11516,7 +11717,7 @@ def run_check(doc, paragraphs, check, rules_data):
                 continue
 
             # Caption formuna uyuyor mu?
-            if not caption_pat.match(norm):
+            if not table_caption_detect_pat.match(norm):
                 continue
 
             # ✅ Metin içi atıf mı? (ise caption sayma)
@@ -11555,8 +11756,15 @@ def run_check(doc, paragraphs, check, rules_data):
 
             head = short_text(text)
 
+
             def err(msg):
                 errors.append(f"'{head}': {msg}")
+
+            # Caption yakalandı ama beklenen "Çizelge X.Y Başlık" formatında değilse ihlal yaz
+            if not table_caption_strict_pat.match(norm):
+                err("Çizelge başlığı numaralandırma formatı hatalı. Beklenen: 'Çizelge X.Y Başlık' "
+                    "(Y’den sonra nokta, ':' veya '-' kullanılmamalı).")
+
 
             # Biçimsel denetim
             if fn and fn != expected_name:
@@ -11580,10 +11788,17 @@ def run_check(doc, paragraphs, check, rules_data):
 
         memo["table_forbidden_idxs"] = table_forbidden_idxs
 
+
         if errors:
             results.append((0, False, rule_title, "; ".join(errors)))
         else:
-            results.append((0, True, rule_title, f"Tüm {len(table_forbidden_idxs)} çizelge başlığı biçimsel olarak uygun."))
+            if len(table_forbidden_idxs) == 0:
+                results.append((0, False, rule_title, "Tez metni içinde hiç çizelge başlığı bulunamadı."))
+            else:
+                results.append((0, True, rule_title, f"Tüm {len(table_forbidden_idxs)} çizelge başlığı biçimsel olarak uygun."))
+
+
+
 
         return results
 
@@ -11604,11 +11819,13 @@ def run_check(doc, paragraphs, check, rules_data):
 
         rule_title = "Çizelge Numaralandırma Kontrolü"
 
+        
         tables = memo.get("table_captions", [])
         if not tables:
-            results.append((0, False, rule_title,
-                            "Hiç çizelge başlığı bulunamadı veya önceki kontrol devre dışıydı."))
+            results.append((0, True, rule_title,
+                            "Tez metni içinde çizelge başlığı bulunamadı; numaralandırma kontrolü uygulanmadı."))
             return results
+
 
         def short_text(s: str, n: int = 90) -> str:
             s = " ".join((s or "").strip().split())
@@ -12104,6 +12321,250 @@ def run_check(doc, paragraphs, check, rules_data):
         return results
 
 
+    # ======================================================
+    # ÖZGEÇMİŞ BAŞLIĞI TESPİTİ ve BİÇİMSEL KONTROLÜ (SONDAN BAŞA + VARYANT KABULLÜ)
+    # - Tez içinde ÖZGEÇMİŞ sayfası bulunmalı
+    # - Arama sondan başa doğru yapılır (en sonda olmalı)
+    # - "ÖZ GEÇMİŞ", "Ozgecmis", "Özgeçmiş" vb. varyantları yakalar
+    # - Bulunsa bile tam olarak "ÖZGEÇMİŞ" yazılması gerektiğini ihlal olarak belirtir
+    # ======================================================
+    elif check["check"] == "cv_heading_block" and check.get("enabled", True):
+        import re
+
+        # 1) YAML parametrelerini al
+        expected_name    = check.get("font_name", "Times New Roman")
+        expected_size    = float(check.get("font_size_pt", 12))
+        expected_bold    = check.get("bold", True)
+        expected_caps    = check.get("all_caps", True)
+        expected_align   = check.get("alignment", "center").lower()
+        expected_spacing = float(check.get("line_spacing", 1.5))
+        expected_before  = float(check.get("space_before", 0))
+        expected_after   = float(check.get("space_after", 24))
+        debug_mode       = check.get("debug", False)
+
+        # Opsiyonel: stil adı kontrolü (verilmezse kontrol etmez)
+        expected_style   = check.get("expected_style", None)
+
+        # 2) Varyant listesi (tespit için) – bulunursa “ÖZGEÇMİŞ olmalı” diye uyaracağız
+        accepted_variants = check.get("accepted_variants", None)
+        if not accepted_variants:
+            accepted_variants = [
+                "OZGEÇMİŞ", "OZGEÇMIS", "OZGECMIS",
+                "ÖZGEÇMIS", "ÖZGEÇMİŞ.",
+                "ÖZ GEÇMİŞ", "ÖZ GECMIS", "OZ GECMIS",
+                "ÖZGEÇMİŞ:", "ÖZGEÇMİŞ -", "ÖZGEÇMİŞ—",
+                "ÖZGEÇMİŞ (CV)", "ÖZGEÇMİŞ (ÖZET)",
+            ]
+
+        # 3) “En sonda olmalı” toleransı (fallback):
+        #    KAYNAKLAR memo'da YOKSA, docx'te sayfa bilgisi net olmadığı için pratik yaklaşım olarak
+        #    belgenin sonundan itibaren son N dolu paragraf penceresi kullanılacak.
+        tail_nonempty_limit = int(check.get("tail_nonempty_limit", 80))
+
+        rule_title = (
+            f"ÖZGEÇMİŞ Başlığı Biçimsel Kontrolü (En Sonda Olmalı)\n"
+            f"{expected_name}, {expected_size} punto, kalın={expected_bold}, "
+            f"BÜYÜK HARF={expected_caps}, {expected_align}, "
+            f"{expected_spacing} satır aralığı, önce {expected_before}, sonra {expected_after}"
+            + (f", stil={expected_style}" if expected_style else "")
+        )
+
+        # 4) TR normalizasyon: harfleri sadeleştir, küçült, boşluk/punkt. temizle
+        def norm_tr(s: str) -> str:
+            trans = str.maketrans({
+                "ı": "i", "İ": "i", "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g",
+                "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u"
+            })
+            s = (s or "").lower().translate(trans)
+            # boşluk ve noktalama farklarını da yok say
+            s = re.sub(r"[\s\.\:\-\–\—\(\)\[\]\{\}]+", "", s)
+            return s.strip()
+
+        # 5) Hedef ve varyantları normalize et
+        target_raw  = "ÖZGEÇMİŞ"
+        target_norm = norm_tr(target_raw)
+        variants_norm = [norm_tr(v) for v in (accepted_variants or [])]
+
+        found_idx = None
+        found_raw_text = None
+        found_is_variant = False
+
+        # ----------------------------------------------------------
+        # 5.5) ARAMA PENCERESİNİ BELİRLE (GÜNCELLEME)
+        # Amaç:
+        #   - KAYNAKLAR başlığını memo'ya kaydettiğimiz için (references_heading_idx),
+        #     son sayfaya yakın bölüm aramalarında "sondan -> KAYNAKLAR'a kadar" tarama yapabiliriz.
+        #
+        # Çalışma:
+        #   - Eğer memo["references_heading_idx"] varsa:
+        #       ÖZGEÇMİŞ'i sadece KAYNAKLAR'dan SONRAKİ kısımda ararız:
+        #       i = len(paragraphs)-1 ... (references_heading_idx+1)
+        #   - Eğer KAYNAKLAR yoksa:
+        #       fallback olarak eski mantık (tail_nonempty_limit) ile son N dolu paragraf penceresinde ararız.
+        # ----------------------------------------------------------
+        ref_idx = memo.get("references_heading_idx", None)
+
+        search_start = len(paragraphs) - 1  # her durumda sondan başlayacağız
+        search_end   = 0                    # default: en başa kadar
+
+        if ref_idx is not None:
+            # KAYNAKLAR başlığı bulunduysa, aramayı KAYNAKLAR'dan sonraki kısım ile sınırla
+            try:
+                ref_idx_int = int(ref_idx)
+            except Exception:
+                ref_idx_int = None
+
+            if ref_idx_int is not None and 0 <= ref_idx_int < len(paragraphs):
+                # KAYNAKLAR paragrafının bir sonrasına kadar (inclusive döngü mantığı için search_end = ref_idx+1)
+                search_end = ref_idx_int + 1
+            else:
+                # ref_idx bozuksa güvenli fallback: en başa kadar ara
+                search_end = 0
+                ref_idx_int = None
+        else:
+            ref_idx_int = None
+
+        # Eğer KAYNAKLAR yoksa, fallback penceresini hesapla (son N dolu paragraf)
+        # ve aramayı sadece bu pencereye sıkıştır.
+        if ref_idx_int is None:
+            nonempty_idxs_from_end = []
+            for j in range(len(paragraphs) - 1, -1, -1):
+                if (paragraphs[j].text or "").strip():
+                    nonempty_idxs_from_end.append(j)
+                if len(nonempty_idxs_from_end) >= tail_nonempty_limit:
+                    break
+
+            if nonempty_idxs_from_end:
+                # pencerenin en eski (küçük) index'i: search_end olarak kullan
+                search_end = min(nonempty_idxs_from_end)
+            else:
+                search_end = 0
+
+        # 6) Sondan başa ara: önce tam hedef, sonra varyant
+        #    (GÜNCELLEME: artık tüm doküman yerine search_start -> search_end aralığında arıyoruz)
+        for i in range(search_start, search_end - 1, -1):
+            raw = (paragraphs[i].text or "").strip()
+            if not raw:
+                continue
+            if norm_tr(raw) == target_norm:
+                found_idx = i
+                found_raw_text = raw
+                found_is_variant = False
+                break
+
+        if found_idx is None:
+            for i in range(search_start, search_end - 1, -1):
+                raw = (paragraphs[i].text or "").strip()
+                if not raw:
+                    continue
+                if norm_tr(raw) in variants_norm:
+                    found_idx = i
+                    found_raw_text = raw
+                    found_is_variant = True
+                    break
+
+        # 7) Bulunamadıysa: net hata
+        if found_idx is None:
+            msg = "⚠️ 'ÖZGEÇMİŞ' başlığı bulunamadı. (ÖZ GEÇMİŞ / Özgeçmiş / Ozgecmis vb. varyantlar da dahil aranmıştır.)"
+            results.append((0, False, rule_title, msg))
+            return results
+
+        # 8) “En sonda olmalı” kontrolü (GÜNCELLEME):
+        #    - Eğer KAYNAKLAR memo'da varsa: arama zaten KAYNAKLAR'dan sonraki kısımda yapıldığı için
+        #      bu, pratikte "tez sonu" bölgesinde bulunduğunu garanti eder → tail_window_ok = True
+        #    - Eğer KAYNAKLAR yoksa: eski yöntem (son N dolu paragraf penceresi içinde mi?) ile kontrol edilir
+        if ref_idx_int is not None:
+            tail_window_ok = True
+        else:
+            # Fallback: eski mantık (son N dolu paragraf listesinde başlık çok geride kalmasın)
+            nonempty_idxs_from_end = []
+            for j in range(len(paragraphs) - 1, -1, -1):
+                if (paragraphs[j].text or "").strip():
+                    nonempty_idxs_from_end.append(j)
+                if len(nonempty_idxs_from_end) >= tail_nonempty_limit:
+                    break
+
+            # başlık, bu “son N dolu paragraf” penceresinin içinde değilse -> en sonda değil
+            tail_window_ok = (found_idx in set(nonempty_idxs_from_end))
+
+        # 9) Başlık paragrafının effective özellikleri
+        p = paragraphs[found_idx]
+        fn = effective_font_name(p)
+        fs = effective_font_size_pt(p)
+        bb = effective_bold(p)
+        ls = effective_line_spacing(p, default=expected_spacing)
+        sb = effective_space_pt(p, "before")
+        sa = effective_space_pt(p, "after")
+        al = effective_alignment(p)
+        txt = (p.text or "").strip()
+        style_name = p.style.name if getattr(p, "style", None) else ""
+
+        # 10) Hataları topla
+        errors = []
+
+        # 10A) Metin tam eşleşme: bulundu ama tam “ÖZGEÇMİŞ” değilse ihlal yaz
+        if txt != target_raw:
+            # varyant yakalanmışsa daha özellikle vurgula
+            if found_is_variant:
+                errors.append(f"Başlık bulundu ancak '{txt}' yazılmış. Doğru yazım tam olarak 'ÖZGEÇMİŞ' olmalı")
+            else:
+                errors.append(f"Başlık metni tam olarak 'ÖZGEÇMİŞ' olmalı (bulunan: '{txt}')")
+
+        # 10B) En sonda olmalı
+        if not tail_window_ok:
+            errors.append(f"ÖZGEÇMİŞ sayfası tezde en sonda olmalı (başlık çok erken konumda görünüyor)")
+
+        # 10C) Biçim kontrolleri
+        if fn and expected_name and fn != expected_name:
+            errors.append(f"Yazı tipi {expected_name} olmalı (bulunan: {fn})")
+
+        if fs and abs(fs - expected_size) > 0.1:
+            errors.append(f"Punto {expected_size} olmalı (bulunan: {fs})")
+
+        if expected_bold is True and bb is not True:
+            errors.append("Kalın (bold) olmalı")
+        if expected_bold is False and bb is True:
+            errors.append("Kalın (bold) olmamalı")
+
+        if expected_caps:
+            # Türkçe büyük harf kontrolü: en güvenlisi ham metni kontrol etmek
+            if txt != txt.upper():
+                errors.append("Tamamı BÜYÜK HARF olmalı")
+
+        # hizalama
+        if expected_align == "center" and al != WD_PARAGRAPH_ALIGNMENT.CENTER:
+            errors.append("Ortalanmış olmalı")
+        elif expected_align == "left" and al != WD_PARAGRAPH_ALIGNMENT.LEFT:
+            errors.append("Sola hizalı olmalı")
+        elif expected_align == "right" and al != WD_PARAGRAPH_ALIGNMENT.RIGHT:
+            errors.append("Sağa hizalı olmalı")
+        elif expected_align == "justify" and al != WD_PARAGRAPH_ALIGNMENT.JUSTIFY:
+            errors.append("İki yana yaslı olmalı")
+
+        # satır aralığı / önce-sonra
+        if ls is not None and abs(ls - expected_spacing) > 0.05:
+            errors.append(f"Satır aralığı {expected_spacing} olmalı (bulunan: {ls})")
+        if sb is not None and abs(sb - expected_before) > 0.5:
+            errors.append(f"Paragraf öncesi {expected_before} pt olmalı (bulunan: {sb} pt)")
+        if sa is not None and abs(sa - expected_after) > 0.5:
+            errors.append(f"Paragraf sonrası {expected_after} pt olmalı (bulunan: {sa} pt)")
+
+        # opsiyonel stil adı
+        if expected_style:
+            if (style_name or "").strip() != expected_style.strip():
+                errors.append(f"Stil adı '{expected_style}' olmalı (bulunan: '{style_name}')")
+
+        # 11) memo’ya kaydet (sonraki kurallar gerekirse kullanır)
+        memo["cv_heading_idx"] = found_idx
+        memo["cv_heading_block_idx"] = found_idx
+
+        # 12) Sonuç
+        if errors:
+            results.append((found_idx, False, rule_title, "; ".join(errors)))
+        else:
+            results.append((found_idx, True, rule_title, "ÖZGEÇMİŞ başlığı bulundu ve biçimsel olarak uygun."))
+
+
 # KONTROL SONUÇLARINI DÖNDÜR
 # ======================================================
 
@@ -12241,7 +12702,8 @@ def wrap_text(text, font_name, font_size, max_width):
     return lines or [""]
 
 
-def create_report(report_config, results_by_section, docx_filename, rules_filename, student_name=None):
+
+def create_report(report_config, results_by_section, docx_filename, rules_filename, student_name=None,app_version_text=None):
     """
     Kontrol sonuçlarını doğrudan PDF raporu olarak üretir.
     Türkçe karakter desteği için init_turkish_pdf_fonts() ile kayıtlı TTF fontlarını kullanır.
@@ -12343,12 +12805,41 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
         c.drawString(2 * cm, y, f"Öğrenci Adı: {student_name_real}")
         y -= 0.5 * cm
 
+
+    
     if thesis_title:
-        c.drawString(2 * cm, y, f"Tez Başlığı: {thesis_title}")
-        y -= 0.5 * cm
+        # ---- Tez Başlığı: uzun ise satır kaydır ----
+        label = "Tez Başlığı: "
+        x0 = 2 * cm
+
+        # Sayfada yazı için kullanılabilir genişlik (sol 2cm, sağ 2cm boşluk)
+        max_w = width - 4 * cm
+
+        # 10 punto ile yazdırıyorsun (Meta Bilgiler zaten 10)
+        font_name = normal_font
+        font_size = 10
+        c.setFont(font_name, font_size)
+
+        # wrap: "Tez Başlığı: ..." tamamını genişliğe göre böl
+        full = f"{label}{thesis_title}"
+        lines = wrap_text(full, font_name, font_size, max_w)
+
+        # satırları bas
+        line_step = 0.5 * cm
+        for ln in lines:
+            c.drawString(x0, y, ln)
+            y -= line_step
+
 
     c.drawString(2 * cm, y, f"Oluşturma Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
     y -= 0.6 * cm
+
+
+    # ✅ YENİ: uygulama sürümü
+    if app_version_text:
+        c.drawString(2*cm, y, f"Uygulama Sürümü: {app_version_text}")
+        y -= 0.7*cm
+
 
     # ============================================================
     # GENEL BAŞARI ÖZETİ (tüm tez için)
@@ -12391,14 +12882,83 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
                 if s in ("✘", "✗", "H", "HAYIR", "False", "0") or (isinstance(v, bool) and v is False):
                     total_fail += 1
 
-    # Başarı yüzdesi
-    success_pct = (total_ok / total_checked * 100.0) if total_checked > 0 else 0.0
+    # ============================================================
+    # ✅ AĞIRLIKLI GENEL BAŞARI HESABI (index.html ile aynı)
+    # Ön Sayfalar %15 + Tez Metni %80 + Arka Sayfalar %5
+    # Not: abstract_tr ön sayfalara DAHİL
+    # ============================================================
 
-    # Üstte görülecek özet satırı
-    overall_text = (
-        f"Genel Uyum Başarısı: %{success_pct:.1f}  "
-        f"(Kontrol edilen: {total_checked}, Uygun: {total_ok}, Uygunsuz: {total_fail})"
+    # 1) Rapor sırası: report.yaml'deki section_order (yoksa order)
+    order = report_config["report"].get("section_order", report_config["report"].get("order", []))
+
+    # 2) Ön/arka grup tanımları (index.html mantığıyla birebir)
+    front_keys = {
+        "general",
+        "inner_cover",
+        "approval",
+        "ethics",
+        "abstract_tr",          # ✅ özellikle dahil
+        "abstract_en",
+        "acknowledgements",
+        "toc",
+        "list_of_tables",
+        "list_of_figures",
+        "symbols_abbreviations",
+    }
+
+    back_keys = {"references", "appendices", "cv"}
+
+    # 3) Tez metni (body): order içinde olup front/back olmayan her şey
+    body_keys = [k for k in order if (k not in front_keys and k not in back_keys)]
+
+    # 4) Bir grubun yüzde hesabı: o gruptaki tüm kurallar içinde OK oranı
+    def _group_pct(keys):
+        # keys: set veya list olabilir; burada her ikisini destekliyoruz
+        group_total = 0   # gruptaki toplam kontrol satırı sayısı
+        group_ok = 0      # gruptaki toplam "Evet" sayısı
+
+        for sk in keys:
+            sec = results_by_section.get(sk, []) or []  # bölüm satırları
+            for res in sec:
+                row = list(res)                         # satırı listeye çevir
+
+                group_total += 1                         # her satır bir kontrol
+
+                # Evet sütunu index'i bulunduysa ve değer "E"/"✔"/True ise OK say
+                if e_idx_global is not None and e_idx_global < len(row):
+                    v = row[e_idx_global]
+                    s = str(v).strip()
+                    if s in ("✔", "✓", "E", "EVET", "True", "1") or (isinstance(v, bool) and v is True):
+                        group_ok += 1
+
+        # Bölümde hiç kural yoksa %0 dön (bölme hatasını önler)
+        return (group_ok / group_total * 100.0) if group_total > 0 else 0.0
+
+    # 5) Grup yüzdelerini hesapla
+    front_pct = _group_pct(front_keys)    # Ön sayfalar başarı %
+    body_pct  = _group_pct(body_keys)     # Tez metni başarı %
+    back_pct  = _group_pct(back_keys)     # Arka sayfalar başarı %
+
+    # 6) Ağırlıklı genel yüzde (asıl amaç)
+    success_pct_weighted = 0.15 * front_pct + 0.80 * body_pct + 0.05 * back_pct
+
+    # ✅ PDF'te gösterilecek genel yüzdeyi artık ağırlıklı hesapla
+    success_pct = success_pct_weighted
+
+
+    # Üstte görülecek özet satırları (2 satır)
+    # 1) Ağırlıklı genel yüzde (success_pct zaten ağırlıklı hesaplanıyor dediğin için aynı kalıyor)
+    overall_line1 = (
+        f"Genel Uyum (Ağırlıklı): %{success_pct:.1f}  "
+
     )
+
+    # 2) Alt kırılım: Ön / Metin / Arka yüzdeleri
+    # Not: front_pct, body_pct, back_pct değişkenleri sende zaten hesaplanıyorsa direkt kullan.
+    overall_line2 = (
+        f"Ön Sayfalar: %{front_pct:.1f} | Tez Metni: %{body_pct:.1f} | Arka Sayfalar: %{back_pct:.1f}"
+    )
+
 
     # ============================================================
     # YÜZDEYE GÖRE RENK SEÇİMİ
@@ -12416,14 +12976,26 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
     # --- Renkli başlık satırı ---
     c.setFillColorRGB(*bar_rgb)
     c.setFont(bold_font, 11)
-    c.drawString(2 * cm, y, overall_text)
+
+        # --- Renkli başlık satırı ---
+    c.setFillColorRGB(*bar_rgb)
+
+    # 1. satır: kalın (bold)
+    c.setFont(bold_font, 11)
+    c.drawString(2 * cm, y, overall_line1)
+
+    # 2. satır: normal font, biraz daha küçük (taşmayı azaltır)
+    y_line2 = y - 0.45 * cm
+    c.setFont(normal_font, 9)
+    c.drawString(2 * cm, y_line2, overall_line2)
+
 
     # --- İnce progress bar (satırın hemen altına) ---
     # Bar ölçüleri
     bar_x = 2 * cm
     bar_w = width - 4 * cm          # sayfa kenarlarından 2'şer cm boşluk
     bar_h = 0.18 * cm               # ince bar
-    bar_y = y - 0.45 * cm           # yazının altına biraz boşluk
+    bar_y = y_line2 - 0.45 * cm           # yazının altına biraz boşluk
 
     # Çerçeve (ince)
     c.setStrokeColorRGB(0, 0, 0)
@@ -12436,8 +13008,8 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
     c.setStrokeColorRGB(*bar_rgb)
     c.rect(bar_x, bar_y, fill_w, bar_h, stroke=0, fill=1)
 
-    # Y pozisyonunu ilerlet (bar + boşluk)
-    y -= 1.1 * cm
+    # Y pozisyonunu ilerlet (2 satır + bar + boşluk)
+    y = bar_y - 0.65 * cm
 
 
 
@@ -12903,7 +13475,7 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
 # ============================================================
 # 3.5 run_check (API / web entegrasyonu için tek giriş noktası)
 # ============================================================
-def run_thesis_check(docx_path, rules_path=None, report_path=None):
+def run_thesis_check(docx_path, rules_path=None, report_path=None, app_version_text=None):
     """
     Dışarıdan (örn. FastAPI) çağırmak için tek fonksiyon.
     - docx_path: kontrol edilecek .docx dosya yolu
@@ -12939,7 +13511,7 @@ def run_thesis_check(docx_path, rules_path=None, report_path=None):
     results_by_section, student_name = process_document(docx_path, rules_data, report_data)
 
     # PDF raporu üret (create_report pdf_path döndürüyor) :contentReference[oaicite:4]{index=4}
-    pdf_path = create_report(report_data, results_by_section, docx_path.name, rules_path.name, student_name)
+    pdf_path = create_report(report_data, results_by_section, docx_path.name, rules_path.name, student_name, app_version_text=app_version_text)
 
     return pdf_path, results_by_section, student_name
 

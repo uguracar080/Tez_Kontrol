@@ -6,7 +6,6 @@ import uuid
 import shutil
 import yaml
 from datetime import datetime, timedelta
-import os
 
 import Tez_Kontrol as tez
 
@@ -20,6 +19,45 @@ REPORTS_DIR = BASE_DIR / "reports_tmp"
 REPORTS_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".docx"}
+
+import os
+import json
+
+def get_build_info() -> dict:
+    """
+    HTML'nin çağırdığı /version endpoint'i ile AYNI kaynak.
+    Sürüm bilgisi .py içine gömülmez.
+    Öncelik sırası:
+      1) ENV (APP_VERSION, GIT_SHA, BUILD_TIME)
+      2) version.json (container / repo içinde)
+    """
+    v = (os.getenv("APP_VERSION") or "").strip()
+    sha = (os.getenv("GIT_SHA") or "").strip()
+    bt = (os.getenv("BUILD_TIME") or "").strip()
+
+    if v or sha or bt:
+        return {
+            "version": v or "dev",
+            "sha": sha,
+            "build_time": bt,
+        }
+
+    base_dir = Path(__file__).parent
+    vp = base_dir / "version.json"
+
+    if vp.exists():
+        try:
+            data = json.loads(vp.read_text(encoding="utf-8"))
+            return {
+                "version": str(data.get("version") or "dev"),
+                "sha": str(data.get("sha") or ""),
+                "build_time": str(data.get("build_time") or ""),
+            }
+        except Exception:
+            pass
+
+    return {"version": "dev", "sha": "", "build_time": ""}
+
 
 # job_id -> indirirken görünecek pdf adı
 REPORT_DOWNLOAD_NAMES: dict[str, str] = {}
@@ -45,14 +83,6 @@ def _safe_filename_part(s: str) -> str:
 
 
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
-
-@app.get("/version")
-async def version():
-    return {
-        "version": os.getenv("APP_VERSION", "dev"),
-        "sha": os.getenv("GIT_SHA", "unknown")[:7],
-        "build_time": os.getenv("BUILD_TIME", ""),
-    }
 
 
 @app.get("/")
@@ -292,10 +322,20 @@ async def analyze(file: UploadFile = File(...)):
         with open(tmp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
+
+
         rules_file = Path(tez.__file__).parent / "rules.yaml"
         report_file = Path(tez.__file__).parent / "report.yaml"
 
-        pdf_path, results_by_section, student_name = tez.run_thesis_check(tmp_path, rules_file, report_file)
+        # --- sürüm bilgisini al (HTML ile AYNI kaynak) ---
+        bi = get_build_info()   # /version ile aynı mantık
+        ver = bi.get("version") or "dev"
+        sha = bi.get("sha") or ""
+
+        # UI’de görünen formatla birebir
+        app_version_text = f"{ver} ({sha})" if sha else ver
+
+        pdf_path, results_by_section, student_name = tez.run_thesis_check(tmp_path, rules_file, report_file,app_version_text=app_version_text)
         # ✅ İndirme adı: RAPOR_OGRENCI_ADI_SOYADI_Tarih_Saat.pdf
         ts = datetime.now().strftime("%d.%m.%Y_%H-%M")
         name_part = _safe_filename_part(student_name)
