@@ -9,7 +9,18 @@ from datetime import datetime, timedelta
 
 import Tez_Kontrol as tez
 
+# --- Hardcoded build info (single source of truth) ---
+APP_VERSION = "v1.0.11333"
+APP_SHA = ""          # istersen "local" yaz veya kısa bir şey
+BUILD_TIME = ""       # istersen "2026-01-30" gibi
+
+
 app = FastAPI()
+
+@app.get("/version")
+def version():
+    return get_build_info()
+
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads_tmp"
@@ -24,40 +35,11 @@ import os
 import json
 
 def get_build_info() -> dict:
-    """
-    HTML'nin çağırdığı /version endpoint'i ile AYNI kaynak.
-    Sürüm bilgisi .py içine gömülmez.
-    Öncelik sırası:
-      1) ENV (APP_VERSION, GIT_SHA, BUILD_TIME)
-      2) version.json (container / repo içinde)
-    """
-    v = (os.getenv("APP_VERSION") or "").strip()
-    sha = (os.getenv("GIT_SHA") or "").strip()
-    bt = (os.getenv("BUILD_TIME") or "").strip()
-
-    if v or sha or bt:
-        return {
-            "version": v or "dev",
-            "sha": sha,
-            "build_time": bt,
-        }
-
-    base_dir = Path(__file__).parent
-    vp = base_dir / "version.json"
-
-    if vp.exists():
-        try:
-            data = json.loads(vp.read_text(encoding="utf-8"))
-            return {
-                "version": str(data.get("version") or "dev"),
-                "sha": str(data.get("sha") or ""),
-                "build_time": str(data.get("build_time") or ""),
-            }
-        except Exception:
-            pass
-
-    return {"version": "dev", "sha": "", "build_time": ""}
-
+    return {
+        "version": APP_VERSION,
+        "sha": APP_SHA,
+        "build_time": BUILD_TIME,
+    }
 
 # job_id -> indirirken görünecek pdf adı
 REPORT_DOWNLOAD_NAMES: dict[str, str] = {}

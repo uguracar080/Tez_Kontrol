@@ -72,22 +72,41 @@ pages:
       - check: paper_size
         expected: "A4"                # 🔑 kağıt boyutu kontrolü
     
-      # --- Sayfa Numaraları Kontrolü ---  
-      - check: page_numbers        # ✅ buraya eklendi
-        align: right
+
+      # --- Sayfa Numaraları Kontrolü ---
+      - check: page_numbers        # ✅ Word section/page-numbering üzerinden kontrol
+        enabled: true
+        # Ön sayfalar: Türkçe Özet'ten itibaren küçük roma (i, ii, iii...) ve i ile başlar
+        preliminaries_as_roman: true
+        prelim_roman_fmt: lowerRoman
+        prelim_roman_start: 1
+        # Tez metni: 1 ile başlayan arap rakamı
+        main_arabic_fmt: decimal
+        main_arabic_from: 1
+        # --- Numara GÖRÜNMEYECEK sayfalar (genelde section-break ile ayrılır) ---
+        no_number_pages:
+          - inner_cover          # İç Kapak
+          - approval             # Tez Onayı
+          - ethics               # Etik Beyanı
+          - dedication           # İthaf
+        # (Mevcut şablon alanları - ileride görsel/konum kontrolünde kullanılabilir)
+        align: right        
+        check_page_number_font: false     # ✅ true/false
         font:
           name: Times New Roman
           size_pt: 12
         location: footer
-        main_arabic_from: 1
-        no_number_pages:
-        - inner_cover          # İç Kapak
-        - approval
-        - ethics
         offset_from_bottom_cm: 2.0
-        preliminaries_as_roman: true
+        # Debug
+        debug: true
+        debug_file: debug_page_numbers.txt
 
-     
+
+
+
+
+
+
   # ----------------------------------------------------------
   # İÇ KAPAK
   # ----------------------------------------------------------

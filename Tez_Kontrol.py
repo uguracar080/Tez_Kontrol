@@ -19,12 +19,15 @@ import time
 # ============================================================
 
 import logging
+import io
+# Windows'ta emoji karakterleri için UTF-8 encoding ayarı
+_stdout_handler = logging.StreamHandler(io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace'))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         #logging.FileHandler("log.txt", mode="w", encoding="utf-8"),  # log.txt dosyasına yaz
-        logging.StreamHandler(sys.stdout)  # ekrana da yaz
+        _stdout_handler  # ekrana da yaz (UTF-8)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -382,7 +385,11 @@ def run_check(doc, paragraphs, check, rules_data):
 
         errors = []
         for section in doc.sections:
-            is_landscape = section.page_width > section.page_height
+            # None kontrolü - page_width veya page_height None ise portrait varsay
+            if section.page_width is None or section.page_height is None:
+                is_landscape = False
+            else:
+                is_landscape = section.page_width > section.page_height
             actual_orientation = "landscape" if is_landscape else "portrait"
             if actual_orientation != orientation:
                 continue
@@ -469,6 +476,623 @@ def run_check(doc, paragraphs, check, rules_data):
             results.append((0, False, rule_title,
                             f"Bulunan: {page_width} × {page_height} cm, Beklenen: 21.0 × 29.7 cm"))
 
+
+    # ======================================================
+    # 5. SAYFA NUMARALARI (WORD SECTION / PAGE NUMBERING) KONTROLÜ
+    # - Paragraf → sayfa eşlemesi yerine Word'ün section "pgNumType" ayarını okur.
+    # - Kritik düzeltme #1:
+    #   Roman section'ı "ilk lowerRoman/start=1" diye seçmek yanlış olabiliyor.
+    #   Çünkü bazı section'larda pgNumType var ama PAGE alanı yok (numara görünmüyor).
+    #   Bu yüzden roman section = (lowerRoman,start=1) + (PAGE alanı gerçekten var) olan ilk section.
+    # - Kritik düzeltme #2:
+    #   Footer/Header "Link to Previous" ile miras alınıyorsa python-docx ilgili section’da boş görünebilir.
+    #   Bu yüzden linked zincirini geriye doğru çözerek gerçek footer/header içeriğinde PAGE arıyoruz.
+    # ======================================================
+    elif check["check"] == "page_numbers" and check.get("enabled", True):
+        import os
+        import re
+
+        # ---------------- YAML parametreleri ----------------
+        main_arabic_from = int(check.get("main_arabic_from", 1))
+
+        preliminaries_as_roman = bool(check.get("preliminaries_as_roman", True))
+        prelim_roman_start = int(check.get("prelim_roman_start", 1))
+        prelim_roman_fmt = str(check.get("prelim_roman_fmt", "lowerRoman"))
+
+        main_arabic_fmt = str(check.get("main_arabic_fmt", "decimal"))
+
+        # ✅ YAML: sayfa numarası font/punto kontrolü açık mı?
+        check_pn_font = bool(check.get("check_page_number_font", True))
+
+        # ✅ (YAML’de zaten vardı) Sayfa numarası yazı tipi kontrolü
+        # Örn: font.name: Times New Roman, font.size_pt: 12
+        expected_pn_font_name = (((check.get("font") or {}) .get("name")) or "").strip() if check_pn_font else ""
+        expected_pn_font_size = (check.get("font") or {}).get("size_pt", None) if check_pn_font else None
+        expected_pn_font_size = float(expected_pn_font_size) if expected_pn_font_size is not None else None
+
+        # Debug
+        debug_mode = bool(check.get("debug", False))
+        debug_file_name = str(check.get("debug_file", "debug_page_numbers.txt")).strip() or "debug_page_numbers.txt"
+        DEBUG_F = dbg_path(debug_file_name)
+
+        rule_title = (
+            "Sayfa Numaraları (Word Section/Page Numbering)\n"
+            f"Beklenti: Ön sayfalar {'küçük roma' if preliminaries_as_roman else 'roman yok'} (i ile), "
+            f"Tez metni arap rakamı ({main_arabic_from} ile)"
+        )
+
+        # ---------------- Yardımcılar ----------------
+        W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+        def _attr(el, local: str):
+            """w:fmt / w:start gibi attribute'ları güvenli oku."""
+            if el is None:
+                return None
+            return el.get(f"{{{W_NS}}}{local}")
+
+        def _pgnumtype_of_section(sec):
+            """
+            Section içindeki <w:pgNumType>:
+            - fmt   : decimal, lowerRoman, upperRoman, ... (bazı belgelerde hiç yazılmayabilir)
+            - start : 1, 2, ...
+            """
+            try:
+                sectPr = sec._sectPr
+                pg = sectPr.xpath("./w:pgNumType")
+                if not pg:
+                    return {"fmt": None, "start": None}
+                pg = pg[0]
+                fmt = _attr(pg, "fmt")
+                start = _attr(pg, "start")
+                try:
+                    start_i = int(start) if start is not None else None
+                except Exception:
+                    start_i = None
+                return {"fmt": fmt, "start": start_i}
+            except Exception:
+                return {"fmt": None, "start": None}
+
+        def _has_page_field_in_element(el) -> bool:
+            """
+            Header/Footer XML içinde PAGE alanı var mı?
+            - fldSimple @w:instr
+            - instrText içinde "PAGE" (NUMPAGES hariç)
+            """
+            try:
+                # fldSimple: <w:fldSimple w:instr=" PAGE \* MERGEFORMAT ">
+                fld = el.xpath(".//w:fldSimple")
+                for f in fld:
+                    instr = f.get(f"{{{W_NS}}}instr") or ""
+                    up = instr.upper()
+                    if "PAGE" in up and "NUMPAGES" not in up:
+                        return True
+
+                # instrText: <w:instrText>PAGE \* MERGEFORMAT</w:instrText>
+                instrs = el.xpath(".//w:instrText")
+                for it in instrs:
+                    t = (it.text or "").upper()
+                    if "PAGE" in t and "NUMPAGES" not in t:
+                        return True
+
+                return False
+            except Exception:
+                return False
+
+        def _resolve_linked_section_container(sections, idx: int, which: str):
+            """
+            which ∈ {"footer","header","first_page_footer","first_page_header"}
+            Eğer ilgili container linked_to_previous ise geriye doğru gidip ilk linkli olmayanı bulur.
+            """
+            j = idx
+            while j > 0:
+                try:
+                    container = getattr(sections[j], which)
+                    if getattr(container, "is_linked_to_previous", False):
+                        j -= 1
+                        continue
+                    return container
+                except Exception:
+                    return None
+            try:
+                return getattr(sections[0], which)
+            except Exception:
+                return None
+
+        # ✅ Sayfa numarası fontunu yakalamak için: PAGE field’ın geçtiği paragrafta görünen metne en yakın run’ı bul
+        def _extract_page_number_run_style(container, doc_obj=None) -> dict | None:
+            """
+            Dönen: {"font_name": str|None, "font_size_pt": float|None}
+
+            Güçlendirilmiş fallback sırası:
+            1) Target run rPr (w:rFonts + w:sz / w:szCs)
+            2) Paragraf rPr (w:pPr/w:rPr)
+            3) Run karakter stili (w:rStyle) -> styles.xml
+            4) Paragraf stili (w:pStyle) -> styles.xml
+            5) Belge varsayılanı docDefaults -> styles.xml
+            6) Paragraftaki diğer run’larda explicit sz/Fonts var mı?
+            """
+            try:
+                el = container._element
+                if not _has_page_field_in_element(el):
+                    return None
+
+                # Word font size: w:sz değeri "half-point" (örn 24 => 12pt)
+                def _sz_to_pt(sz_val: str | None):
+                    try:
+                        if sz_val is None:
+                            return None
+                        v = float(sz_val)
+                        return v / 2.0
+                    except Exception:
+                        return None
+
+                def _read_rpr_font(rpr):
+                    """
+                    rpr: <w:rPr> element
+                    Dönüş: (font_name, font_size_pt)
+                    """
+                    if rpr is None:
+                        return (None, None)
+
+                    font_name = None
+                    rfonts = rpr.xpath("./w:rFonts")
+                    if rfonts:
+                        rf = rfonts[0]
+                        font_name = (
+                            rf.get(f"{{{W_NS}}}ascii")
+                            or rf.get(f"{{{W_NS}}}hAnsi")
+                            or rf.get(f"{{{W_NS}}}cs")
+                            or None
+                        )
+
+                    # size: önce w:sz, yoksa w:szCs
+                    size_pt = None
+                    sz = rpr.xpath("./w:sz")
+                    if sz:
+                        size_pt = _sz_to_pt(sz[0].get(f"{{{W_NS}}}val"))
+                    if size_pt is None:
+                        szcs = rpr.xpath("./w:szCs")
+                        if szcs:
+                            size_pt = _sz_to_pt(szcs[0].get(f"{{{W_NS}}}val"))
+
+                    return (font_name, size_pt)
+
+                def _get_styles_root():
+                    """
+                    doc_obj varsa styles.xml root elementini döndür.
+                    python-docx'te doc.part.styles.element lxml root'tur.
+                    """
+                    try:
+                        if doc_obj is None:
+                            return None
+                        return doc_obj.part.styles.element
+                    except Exception:
+                        return None
+
+                def _style_rpr_from_styles(styles_root, style_id: str):
+                    """
+                    styles.xml içinde styleId -> w:rPr döndür (yoksa None)
+                    """
+                    if styles_root is None or not style_id:
+                        return None
+                    try:
+                        nodes = styles_root.xpath(f".//w:style[@w:styleId='{style_id}']/w:rPr")
+                        return nodes[0] if nodes else None
+                    except Exception:
+                        return None
+
+                def _pstyle_rpr_from_styles(styles_root, pstyle_id: str):
+                    return _style_rpr_from_styles(styles_root, pstyle_id)
+
+                def _docdefaults_rpr(styles_root):
+                    if styles_root is None:
+                        return None
+                    try:
+                        nodes = styles_root.xpath(".//w:docDefaults/w:rPrDefault/w:rPr")
+                        return nodes[0] if nodes else None
+                    except Exception:
+                        return None
+
+                digit_re = re.compile(r"^\s*\d+\s*$")
+                roman_re = re.compile(r"^\s*[ivxlcdm]+\s*$", re.IGNORECASE)
+
+                fld_simples = el.xpath(
+                    ".//w:fldSimple[contains(translate(@w:instr,'abcdefghijklmnopqrstuvwxyz','ABCDEFGHIJKLMNOPQRSTUVWXYZ'),'PAGE')]"
+                )
+                instr_texts = el.xpath(
+                    ".//w:instrText[contains(translate(text(),'abcdefghijklmnopqrstuvwxyz','ABCDEFGHIJKLMNOPQRSTUVWXYZ'),'PAGE')]"
+                )
+
+                candidates_p = []
+                for node in fld_simples + instr_texts:
+                    try:
+                        p_anc = node.xpath("ancestor::w:p[1]")
+                        if p_anc:
+                            candidates_p.append(p_anc[0])
+                    except Exception:
+                        continue
+
+                if not candidates_p:
+                    candidates_p = el.xpath(".//w:p")
+
+                txbx_ps = el.xpath(".//w:txbxContent//w:p")
+                for p in txbx_ps:
+                    candidates_p.append(p)
+
+                uniq = []
+                seen_ids = set()
+                for p in candidates_p:
+                    pid = id(p)
+                    if pid not in seen_ids:
+                        seen_ids.add(pid)
+                        uniq.append(p)
+                candidates_p = uniq
+
+                styles_root = _get_styles_root()
+
+                for p in candidates_p:
+                    ts = p.xpath(".//w:r/w:t")
+
+                    target_r = None
+                    for t in ts:
+                        txt = (t.text or "").strip()
+                        if not txt:
+                            continue
+                        if digit_re.match(txt) or roman_re.match(txt):
+                            r = t.xpath("ancestor::w:r[1]")
+                            if r:
+                                target_r = r[0]
+                                break
+
+                    if target_r is None:
+                        r0 = p.xpath(".//w:r[1]")
+                        target_r = r0[0] if r0 else None
+                    if target_r is None:
+                        continue
+
+                    rpr = target_r.xpath("./w:rPr")
+                    rpr = rpr[0] if rpr else None
+                    font_name, size_pt = _read_rpr_font(rpr)
+
+                    rstyle_id = None
+                    try:
+                        if rpr is not None:
+                            rs = rpr.xpath("./w:rStyle")
+                            if rs:
+                                rstyle_id = rs[0].get(f"{{{W_NS}}}val") or None
+                    except Exception:
+                        rstyle_id = None
+
+                    if font_name is None or size_pt is None:
+                        try:
+                            p_rpr = p.xpath("./w:pPr/w:rPr")
+                            p_rpr = p_rpr[0] if p_rpr else None
+                            fn2, sz2 = _read_rpr_font(p_rpr)
+                            if font_name is None and fn2:
+                                font_name = fn2
+                            if size_pt is None and sz2 is not None:
+                                size_pt = sz2
+                        except Exception:
+                            pass
+
+                    pstyle_id = None
+                    try:
+                        ps = p.xpath("./w:pPr/w:pStyle")
+                        if ps:
+                            pstyle_id = ps[0].get(f"{{{W_NS}}}val") or None
+                    except Exception:
+                        pstyle_id = None
+
+                    if styles_root is not None:
+                        if (font_name is None or size_pt is None) and rstyle_id:
+                            srpr = _style_rpr_from_styles(styles_root, rstyle_id)
+                            fn3, sz3 = _read_rpr_font(srpr)
+                            if font_name is None and fn3:
+                                font_name = fn3
+                            if size_pt is None and sz3 is not None:
+                                size_pt = sz3
+
+                        if (font_name is None or size_pt is None) and pstyle_id:
+                            prpr = _pstyle_rpr_from_styles(styles_root, pstyle_id)
+                            fn4, sz4 = _read_rpr_font(prpr)
+                            if font_name is None and fn4:
+                                font_name = fn4
+                            if size_pt is None and sz4 is not None:
+                                size_pt = sz4
+
+                        if font_name is None or size_pt is None:
+                            drpr = _docdefaults_rpr(styles_root)
+                            fn5, sz5 = _read_rpr_font(drpr)
+                            if font_name is None and fn5:
+                                font_name = fn5
+                            if size_pt is None and sz5 is not None:
+                                size_pt = sz5
+
+                    if size_pt is None:
+                        try:
+                            any_sz = p.xpath(".//w:rPr/w:sz[1]")
+                            if any_sz:
+                                size_pt = _sz_to_pt(any_sz[0].get(f"{{{W_NS}}}val"))
+                            if size_pt is None:
+                                any_szcs = p.xpath(".//w:rPr/w:szCs[1]")
+                                if any_szcs:
+                                    size_pt = _sz_to_pt(any_szcs[0].get(f"{{{W_NS}}}val"))
+                        except Exception:
+                            pass
+
+                    if font_name is None:
+                        try:
+                            any_rf = p.xpath(".//w:rPr/w:rFonts[1]")
+                            if any_rf:
+                                rf = any_rf[0]
+                                font_name = (
+                                    rf.get(f"{{{W_NS}}}ascii")
+                                    or rf.get(f"{{{W_NS}}}hAnsi")
+                                    or rf.get(f"{{{W_NS}}}cs")
+                                    or None
+                                )
+                        except Exception:
+                            pass
+
+                    if font_name is None and size_pt is None:
+                        continue
+
+                    return {"font_name": font_name, "font_size_pt": size_pt}
+
+                return None
+
+            except Exception:
+                return None
+
+        def _font_mismatch_msg(sec_index: int, where: str, pn_style: dict | None) -> str | None:
+            if not (expected_pn_font_name or expected_pn_font_size is not None):
+                return None
+
+            if pn_style is None:
+                return (
+                    f"{where} (section {sec_index}) için sayfa numarası yazı tipi/punto tespit edilemedi "
+                    f"(Word stil mirası/field yapısı nedeniyle). Debug açıkken pn_style satırına bak."
+                )
+
+            seen_name = (pn_style.get("font_name") or "").strip()
+            seen_size = pn_style.get("font_size_pt")
+
+            problems = []
+
+            if expected_pn_font_name:
+                if (not seen_name) or (seen_name.lower() != expected_pn_font_name.lower()):
+                    problems.append(
+                        f"yazı tipi '{expected_pn_font_name}' bekleniyordu, görülen '{seen_name or 'None'}'"
+                    )
+
+            if expected_pn_font_size is not None:
+                if seen_size is None:
+                    problems.append(
+                        f"punto {expected_pn_font_size:g} bekleniyordu ancak punto değeri XML'den tespit edilemedi "
+                        f"(muhtemelen stil mirası; run üzerinde w:sz yok)"
+                    )
+                else:
+                    if abs(float(seen_size) - float(expected_pn_font_size)) > 0.01:
+                        problems.append(
+                            f"punto {expected_pn_font_size:g} bekleniyordu, görülen {float(seen_size):g}"
+                        )
+
+            if not problems:
+                return None
+
+            return (
+                f"{where} sayfa numarası yazı tipi hatalı: " + ", ".join(problems) +
+                f" (section {sec_index})."
+            )
+
+        def _section_has_visible_page_number(sections, idx: int) -> bool:
+            """
+            Bu section’da sayfa numarası gerçekten GÖRÜNÜR mü?
+            - footer/header (linked zinciri çözülerek) içinde PAGE alanı aranır.
+            - first_page_* (different first page) için de aynı kontrol yapılır.
+            """
+            for which in ("footer", "header", "first_page_footer", "first_page_header"):
+                cont = _resolve_linked_section_container(sections, idx, which)
+                if cont is None:
+                    continue
+                try:
+                    if _has_page_field_in_element(cont._element):
+                        return True
+                except Exception:
+                    continue
+            return False
+
+        # ---------------- Debug dosyası ----------------
+        dbg = None
+        if debug_mode:
+            new_file = not os.path.exists(DEBUG_F)
+            dbg = open(DEBUG_F, "a", encoding="utf-8")
+            if new_file:
+                dbg.write("[DEBUG] Sayfa Numaraları (Section/Page Numbering)\n")
+                dbg.write("===========================================\n\n")
+            else:
+                dbg.write("\n-------------------------------------------\n")
+                dbg.write("Yeni kontrol çalıştırması başlatıldı.\n\n")
+
+        def dlog(msg: str):
+            if dbg:
+                dbg.write(msg.rstrip() + "\n")
+
+        # ---------------- Bölüm bilgilerini topla ----------------
+        sections = list(doc.sections)
+        sections_info = []
+        for i, sec in enumerate(sections):
+            pg = _pgnumtype_of_section(sec)
+            has_page = _section_has_visible_page_number(sections, i)
+
+            pn_style = None
+            if has_page and (expected_pn_font_name or expected_pn_font_size is not None):
+                for which in ("footer", "first_page_footer", "header", "first_page_header"):
+                    cont = _resolve_linked_section_container(sections, i, which)
+                    if cont is None:
+                        continue
+                    pn_style = _extract_page_number_run_style(cont, doc_obj=doc)
+                    if pn_style:
+                        break
+
+            info = {
+                "index": i,
+                "fmt": pg.get("fmt"),
+                "start": pg.get("start"),
+                "has_page_field": bool(has_page),
+                "pn_style": pn_style,
+            }
+            sections_info.append(info)
+
+            dlog(f"[SECTION {i}] fmt={info['fmt']}, start={info['start']}, has_page_field={info['has_page_field']}, pn_style={info['pn_style']}")
+
+        memo["page_numbering_sections"] = sections_info
+
+        # ---------------- Beklenen section düzenini kontrol et ----------------
+        errors = []
+
+        # 1) ROMAN section'ı bul (senin mevcut mantığını koruyoruz)
+        roman_idx = None
+        if preliminaries_as_roman:
+            for s in sections_info:
+                if (s.get("fmt") == prelim_roman_fmt) and (s.get("start") == prelim_roman_start) and s.get("has_page_field"):
+                    roman_idx = s["index"]
+                    break
+            if roman_idx is None:
+                for s in sections_info:
+                    if (s.get("fmt") == prelim_roman_fmt) and (s.get("start") == prelim_roman_start):
+                        roman_idx = s["index"]
+                        break
+            if roman_idx is None:
+                errors.append(
+                    f"Ön sayfalar için Roma numaralandırma bölümü bulunamadı "
+                    f"(beklenen: fmt='{prelim_roman_fmt}', start={prelim_roman_start})."
+                )
+
+        # 2) ANA METİN section'ı bul (senin mevcut mantığını koruyoruz)
+        main_idx = None
+        search_from = (roman_idx + 1) if (preliminaries_as_roman and roman_idx is not None) else 0
+
+        def _is_decimal_like(fmt):
+            # Word’de fmt=None çoğu zaman decimal kabul edilir
+            return (fmt == main_arabic_fmt) or (fmt is None and main_arabic_fmt == "decimal")
+
+        for s in sections_info[search_from:]:
+            if _is_decimal_like(s.get("fmt")) and s.get("has_page_field"):
+                main_idx = s["index"]
+                break
+
+        if main_idx is None:
+            errors.append("Tez metni için (decimal) sayfa numarası GÖRÜNÜR olan bir section bulunamadı.")
+
+        # 3) Start kontrolü (anlaşılır mesaj)
+        if main_idx is not None:
+            s = sections_info[main_idx]
+            fmt_seen = s.get("fmt")
+            start_seen = s.get("start")
+
+            if start_seen != main_arabic_from:
+                fmt_txt = "Arap rakamı (decimal)" if _is_decimal_like(fmt_seen) else (fmt_seen or "None")
+                errors.append(
+                    "Tez metni sayfa numarası başlangıcı beklenenden farklı.\n"
+                    f"- Beklenen başlangıç: {main_arabic_from}\n"
+                    f"- Görülen başlangıç: {start_seen}\n"
+                    f"- Biçim (fmt): {fmt_txt}\n"
+                    f"- Tez metni kabul edilen bölüm: section {main_idx}"
+                )
+
+        # ✅ 3B) Tez metni başladıktan sonra (section main_idx), ilerideki section’larda numara RESTART/GERİYE gitmiş mi?
+        # - Render yapmadan tek tek sayfa numarası doğrulanamaz; ama section pgNumType@start ile "Start at" hatası yakalanır.
+        if main_idx is not None:
+            last_explicit_start = sections_info[main_idx].get("start")
+            # last_explicit_start None ise yine de referans olarak main_arabic_from kullan
+            last_explicit_start = int(last_explicit_start) if last_explicit_start is not None else int(main_arabic_from)
+
+            for s in sections_info[main_idx + 1:]:
+                if not s.get("has_page_field"):
+                    continue
+                if not _is_decimal_like(s.get("fmt")):
+                    continue
+
+                st = s.get("start")
+                if st is None:
+                    # "Continue from previous section" → normal
+                    continue
+
+                try:
+                    st_i = int(st)
+                except Exception:
+                    continue
+
+                # 1) Yeniden 1'den (veya main_arabic_from'dan) başlatma: tipik section break hatası
+                if st_i <= int(main_arabic_from):
+                    errors.append(
+                        "Tez metni içinde sayfa numarası ileride bir section’da yeniden başlatılmış görünüyor.\n"
+                        f"- Beklenti: previous section’dan devam (start=None)\n"
+                        f"- Görülen: start={st_i}\n"
+                        f"- Olası sebep: yatay/dikey bölüm geçişinde 'Continue from previous section' yerine 'Start at' seçilmiş\n"
+                        f"- Problemli bölüm: section {s['index']}"
+                    )
+                    last_explicit_start = st_i
+                    continue
+
+                # 2) Geriye gitme (explicit start küçülüyorsa)
+                if st_i < last_explicit_start:
+                    errors.append(
+                        "Tez metni içinde sayfa numarası sırası bozulmuş (geri gitmiş) görünüyor.\n"
+                        f"- Önceki explicit başlangıç: {last_explicit_start}\n"
+                        f"- Sonraki explicit başlangıç: {st_i}\n"
+                        f"- Problemli bölüm: section {s['index']}"
+                    )
+
+                last_explicit_start = st_i
+
+        # ✅ 4) FONT kontrolü (senin mevcut mantığını koruyoruz)
+        def _font_mismatch_msg(sec_index: int, where: str, pn_style: dict | None) -> str | None:
+            if not (expected_pn_font_name or expected_pn_font_size is not None):
+                return None
+            if pn_style is None:
+                return (
+                    f"{where} (section {sec_index}) için sayfa numarası yazı tipi tespit edilemedi "
+                    f"(Word stil mirası/field yapısı nedeniyle). Debug açıkken pn_style satırına bak."
+                )
+
+            seen_name = (pn_style.get("font_name") or "").strip()
+            seen_size = pn_style.get("font_size_pt")
+
+            problems = []
+            if expected_pn_font_name:
+                if (not seen_name) or (seen_name.lower() != expected_pn_font_name.lower()):
+                    problems.append(f"yazı tipi '{expected_pn_font_name}' bekleniyordu, görülen '{seen_name or 'None'}'")
+            if expected_pn_font_size is not None:
+                if seen_size is None or abs(float(seen_size) - float(expected_pn_font_size)) > 0.01:
+                    problems.append(f"punto {expected_pn_font_size:g} bekleniyordu, görülen '{seen_size if seen_size is not None else 'None'}'")
+
+            if not problems:
+                return None
+
+            return (
+                f"{where} sayfa numarası yazı tipi hatalı: " + ", ".join(problems) +
+                f" (section {sec_index})."
+            )
+
+        if preliminaries_as_roman and roman_idx is not None:
+            msg = _font_mismatch_msg(roman_idx, "Ön sayfalar (Roma)", sections_info[roman_idx].get("pn_style"))
+            if msg:
+                errors.append(msg)
+
+        if main_idx is not None:
+            msg = _font_mismatch_msg(main_idx, "Tez metni (Arap rakamı)", sections_info[main_idx].get("pn_style"))
+            if msg:
+                errors.append(msg)
+
+        if dbg:
+            dbg.close()
+
+        if errors:
+            return [(0, False, rule_title, "\n- " + "\n- ".join(errors))]
+        else:
+            return [(0, True, rule_title, "")]
 
 
     # ===============================================================================================================#
@@ -1426,12 +2050,15 @@ def run_check(doc, paragraphs, check, rules_data):
             i += 1
 
         title_indices = []
-        # 1. başlık satırı
+        # İlk başlık satırı
         if i < len(paragraphs):
             title_indices.append(i)
-        # 2. satır varsa ve doluysa ekle
-        if i + 1 < len(paragraphs) and paragraphs[i + 1].text.strip():
-            title_indices.append(i + 1)
+            
+        # Sonraki satırları da kontrol et (boş olana kadar veya max 5 satıra kadar)
+        curr = i + 1
+        while curr < len(paragraphs) and paragraphs[curr].text.strip() and len(title_indices) < 6:
+            title_indices.append(curr)
+            curr += 1
 
         if not title_indices:
             results.append((dep_idx, False, rule_title, "Tez başlığı bulunamadı"))
@@ -1439,6 +2066,12 @@ def run_check(doc, paragraphs, check, rules_data):
                 debug_file.write("❌ Tez başlığı bulunamadı.\n")
                 debug_file.close()
             return results
+            
+        # Başlığı Memo'ya kaydet (tam metin)
+        full_title_text = " ".join([paragraphs[idx].text.strip() for idx in title_indices])
+        memo["thesis_title"] = full_title_text
+        # Son satırın index'ini kaydet (diğer kurallar için)
+        memo["inner_cover_title_index"] = title_indices[-1]
 
         errors = []
 
@@ -3290,17 +3923,15 @@ def run_check(doc, paragraphs, check, rules_data):
 
                 # --- her satırı format kontrolü
                 for k, (idx, p) in enumerate(collected_sorted, start=1):
+                    # --- satır önizleme (ilk birkaç kelime)
+                    txt = (p.text or "").strip()
+                    pv = " ".join(txt.split()[:7])
+                    if len(pv) > 70:
+                        pv = pv[:70].rstrip() + "…"
+                    loc = f"{k}. satır (belge:{idx})" + (f" ('{pv}')" if pv else "")
+                    
                     # 1) Satır boş olmamalı
                     if is_effectively_blank(p.text or ""):
-                    
-                        # --- satır önizleme (ilk birkaç kelime)
-                        txt = (p.text or "").strip()
-                        pv = " ".join(txt.split()[:7])
-                        if len(pv) > 70:
-                            pv = pv[:70].rstrip() + "…"
-                        loc = f"{k}. satır (belge:{idx})" + (f" ('{pv}')" if pv else "")
-
-                        
                         errors.append(f"{loc}. satır boş olmamalı")
                         continue
 
@@ -10845,7 +11476,14 @@ def run_check(doc, paragraphs, check, rules_data):
         expected_before  = float(check.get("space_before", 18))
         expected_after   = float(check.get("space_after", 18))
         expected_align   = check.get("alignment", None)
-        heading_styles   = check.get("heading_styles", ["Heading 2", "Heading 3", "Heading 4"])
+
+        # ✅ Kılavuz: başlık 6 derinliğe kadar inebilir
+        # Heading 2 (x.y) → Heading 7 (x.y.z.a.b.c) olacak şekilde varsayılanı genişletiyoruz.
+        heading_styles = check.get(
+            "heading_styles",
+            ["Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6", "Heading 7"]
+        )
+
         debug_mode       = check.get("debug", False)
 
         # --- Hizalama parametresini normalize et (tek veya çoklu) ---
@@ -10981,7 +11619,10 @@ def run_check(doc, paragraphs, check, rules_data):
         # =====================================================
         errors = []
         subheading_idxs = set()
-        subheading_numbered_items = []  # [(idx, (2,1,3), "2.1.3 Başlık")]
+
+        # ✅ Artık her numaralı başlık için depth + style da saklıyoruz
+        # [(idx, nums_tuple, raw_text, depth, style_name)]
+        subheading_numbered_items = []
 
         def parse_heading_number(s: str):
             m = re.match(r"^(\d+(?:\.\d+)+)\.?\s+", s.strip())
@@ -10989,20 +11630,42 @@ def run_check(doc, paragraphs, check, rules_data):
                 return None
             return tuple(int(x) for x in m.group(1).split("."))
 
+        def style_to_expected_depth(style_name: str):
+            """
+            'Heading 2' -> 2, 'Heading 3' -> 3 ... gibi beklenen numara derinliği.
+            Eşleşmezse None döner.
+            """
+            m = re.match(r"^\s*Heading\s+(\d+)\s*$", style_name or "", re.IGNORECASE)
+            if not m:
+                return None
+            try:
+                return int(m.group(1))
+            except Exception:
+                return None
+
         for i in range(start_idx, end_idx):
             p = paragraphs[i]
             text = (p.text or "").strip()
             if not text:
                 continue
+
             style_name = p.style.name if p.style else ""
 
+            # ✅ Alt başlık kabul kriteri:
+            # - Style birebir heading_styles içinde
+            # - veya numara desenine uyuyor
             if style_name in heading_styles or numbered_heading_pattern.match(text):
                 subheading_idxs.add(i)
 
-                # numaralıysa memo listesine ekle
                 nums = parse_heading_number(text)
                 if nums:
-                    subheading_numbered_items.append((i, nums, text.strip()))
+                    depth = len(nums)
+                    subheading_numbered_items.append((i, nums, text.strip(), depth, style_name))
+
+                    # ✅ Kılavuz: 6 derinlikten fazla olmamalı
+                    if depth > 6:
+                        head = short_text(text)
+                        errors.append(f"'{head}' başlığı 6 seviyeden fazla derinliğe inemez (gelen derinlik={depth}).")
 
                 fn, fs, bb, ls, sb, sa, al, st = dbg_para_props(p)
 
@@ -11021,7 +11684,7 @@ def run_check(doc, paragraphs, check, rules_data):
 
                 head = short_text(text)
 
-                # ✅ loc yok: sadece metinle rapor
+                # ✅ Biçim kontrolleri (mevcut yaklaşımı bozmuyoruz)
                 if fn and fn != expected_name:
                     errors.append(f"'{head}' alt başlık fontu {fn} yerine {expected_name} olmalı")
                 if fs and abs(fs - expected_size) > 0.1:
@@ -11062,7 +11725,7 @@ def run_check(doc, paragraphs, check, rules_data):
 
     # ======================================================
     # ALT BAŞLIK NUMARALARI SIRA KONTROLÜ
-    # (örn. 2.1→2.2, bölüm geçişi 2.x→3.1, 4.1.2→4.1.3)
+    # (örn. 2.1→2.2, bölüm geçişi 2.x→3.1, 4.1.2→4.1.3, ... 6 derinliğe kadar)
     # - Hata mesajında: hangi başlıkta, ne bekleniyordu, ne görüldü
     # ======================================================
     elif check["check"] == "subheading_number_sequence":
@@ -11082,132 +11745,93 @@ def run_check(doc, paragraphs, check, rules_data):
             results.append((0, True, rule_title, "Numaralı alt başlık bulunmadı."))
             return results
 
+        # ------------------------------------------------------
+        # ✅ Geriye uyumluluk:
+        # items elemanları ya (idx, nums, raw) ya da (idx, nums, raw, depth, style_name)
+        # ------------------------------------------------------
+        norm_items = []
+        for t in items:
+            if len(t) >= 5:
+                idx, nums, raw = t[0], t[1], t[2]
+                depth = t[3]
+                style_name = t[4]
+            else:
+                idx, nums, raw = t[0], t[1], t[2]
+                depth = len(nums) if nums else 0
+                style_name = ""
+            norm_items.append((idx, nums, raw, depth, style_name))
+
         # Paragraf sırasına göre sırala
-        items = sorted(items, key=lambda t: t[0])  # (idx, nums, raw)
-        
-        # Beklenen yapılar:
-        # - iki seviyeli: (chapter, sub)
-        # - üç+ seviyeli: (chapter, sub, subsub, ...)
+        norm_items = sorted(norm_items, key=lambda x: x[0])
+
+        # ------------------------------------------------------
+        # ✅ Hiyerarşik sayaç mantığı (6 derinliğe kadar)
         #
-        # Kontrol stratejisi:
-        # 1) Bölüm (ilk rakam) artışı: 2 -> 3 -> 4 ... (azalmamalı)
-        # 2) Aynı bölümde iki seviyeli (x.y) ana sıra: y artmalı, bölüm değişince y=1 olmalı
-        # 3) Aynı (x.y) altında üçüncü seviye varsa: z artmalı, (x.y) değişince z=1 olmalı
+        # Her başlık için:
+        #   parent = nums[:-1]
+        #   cur    = nums[-1]
+        #
+        # Kurallar:
+        # 1) Aynı parent altında child sayacı 1,2,3,... artmalı
+        # 2) Yeni bir parent altında ilk child = 1 olmalı
+        # 3) Derine inmek (örn 3.1.1 → 3.1.1.1) üst seviyeyi artırmaz
+        # 4) Derinlik 6'yı aşamaz
+        # ------------------------------------------------------
+        last_child = {}   # { parent_tuple: last_seen_child_int }
+        prev_item = None  # (idx, nums, raw, depth, style_name)
 
-        last_ch = None
-        last_l2 = None   # (ch, y)
-        last_l3 = None   # (ch, y, z)
-
-        prev_item = None  # (idx, nums, raw)
-
-        for idx, nums, raw in items:
+        for idx, nums, raw, depth, style_name in norm_items:
             head = short_text(raw)
 
-            # Güvenlik: nums en az 2 seviye olmalı (2.1 gibi)
+            # En az 2 seviye olmalı (2.1 gibi)
             if not nums or len(nums) < 2:
-                prev_item = (idx, nums, raw)
+                prev_item = (idx, nums, raw, depth, style_name)
                 continue
 
-            ch = nums[0]
-            y  = nums[1]
-
-            # (1) Bölüm geriye gidiyor mu?
-            if last_ch is not None and ch < last_ch:
-                prev_head = short_text(prev_item[2]) if prev_item else ""
+            # 6 derinlik kuralı
+            if len(nums) > 6:
                 errors.append(
-                    f"Başlık: '{head}' → bölüm numarası geriye gitmiş "
-                    f"(önce {last_ch}, şimdi {ch}). Önceki: '{prev_head}'."
+                    f"Başlık: '{head}' → numara derinliği 6'yı aşamaz (gelen: {len(nums)})."
                 )
+                prev_item = (idx, nums, raw, depth, style_name)
+                continue
 
-            # (2) Bölüm değişimi: yeni bölüm ilk alt başlık 1 ile başlamalı (x.1)
-            if last_ch is not None and ch != last_ch:
-                if y != 1:
-                    expected = f"{ch}.1"
-                    got = fmt(nums[:2])
+            parent = tuple(nums[:-1])
+            cur = int(nums[-1])
+
+            # İlk kez görülen parent → child 1 olmalı
+            if parent not in last_child:
+                if cur != 1:
+                    expected = fmt(parent + (1,))
+                    got = fmt(nums)
                     errors.append(
-                        f"Başlık: '{head}' → yeni bölümde ilk alt başlık {expected} olmalı, "
+                        f"Başlık: '{head}' → '{fmt(parent)}' altında ilk alt başlık {expected} olmalı, "
                         f"ama {got} geldi."
                     )
-                # reset
-                last_ch = ch
-                last_l2 = (ch, y)
-                last_l3 = None
-                prev_item = (idx, nums, raw)
+                last_child[parent] = cur
+                prev_item = (idx, nums, raw, depth, style_name)
                 continue
 
-            # (3) Aynı bölüm içinde x.y sırası: y birer artmalı (2.1→2.2→2.3)
-            if last_l2 is None:
-                last_l2 = (ch, y)
-            else:
-                prev_ch, prev_y = last_l2
-                if ch == prev_ch:
-                    if y != prev_y:
-                        expected_y = prev_y + 1
-                        if y != expected_y:
-                            expected = f"{ch}.{expected_y}"
-                            got = fmt(nums[:2])
-                            prev_head = short_text(prev_item[2]) if prev_item else ""
-                            errors.append(
-                                f"Başlık: '{head}' → alt başlık sırası bozuk. "
-                                f"Beklenen: {expected}, Gelen: {got}. "
-                                f"Önceki: '{prev_head}'."
-                            )
-                        # yeni x.y’ye geçildi → l3 reset
-                        last_l2 = (ch, y)
-                        last_l3 = None
-                    else:
-                        # aynı x.y tekrar görüldü: bu sadece alt-alt (z) için normal olabilir
-                        pass
-                else:
-                    last_l2 = (ch, y)
-                    last_l3 = None
+            # Aynı parent altında artış kontrolü
+            expected_cur = last_child[parent] + 1
+            if cur != expected_cur:
+                expected = fmt(parent + (expected_cur,))
+                got = fmt(nums)
+                prev_head = short_text(prev_item[2]) if prev_item else ""
+                errors.append(
+                    f"Başlık: '{head}' → alt başlık sırası bozuk. "
+                    f"Beklenen: {expected}, Gelen: {got}. "
+                    f"Önceki: '{prev_head}'."
+                )
 
-            # (4) Alt-alt (x.y.z) kontrolü: aynı x.y altında z birer artmalı
-            if len(nums) >= 3:
-                z = nums[2]
-
-                if last_l3 is None:
-                    # yeni x.y altında ilk z=1 olmalı
-                    if z != 1:
-                        expected = f"{ch}.{y}.1"
-                        got = fmt(nums[:3])
-                        errors.append(
-                            f"Başlık: '{head}' → '{ch}.{y}' altında ilk alt-alt başlık {expected} olmalı, "
-                            f"ama {got} geldi."
-                        )
-                    last_l3 = (ch, y, z)
-                else:
-                    prev_ch, prev_y, prev_z = last_l3
-                    if (ch, y) != (prev_ch, prev_y):
-                        # farklı x.y’ye geçildi: ilk z=1 olmalı
-                        if z != 1:
-                            expected = f"{ch}.{y}.1"
-                            got = fmt(nums[:3])
-                            errors.append(
-                                f"Başlık: '{head}' → '{ch}.{y}' altında ilk alt-alt başlık {expected} olmalı, "
-                                f"ama {got} geldi."
-                            )
-                        last_l3 = (ch, y, z)
-                    else:
-                        expected_z = prev_z + 1
-                        if z != expected_z:
-                            expected = f"{ch}.{y}.{expected_z}"
-                            got = fmt(nums[:3])
-                            prev_head = short_text(prev_item[2]) if prev_item else ""
-                            errors.append(
-                                f"Başlık: '{head}' → alt-alt başlık sırası bozuk. "
-                                f"Beklenen: {expected}, Gelen: {got}. "
-                                f"Önceki: '{prev_head}'."
-                            )
-                        last_l3 = (ch, y, z)
-
-            last_ch = ch
-            prev_item = (idx, nums, raw)
+            last_child[parent] = cur
+            prev_item = (idx, nums, raw, depth, style_name)
 
         if errors:
             results.append((0, False, rule_title, "; ".join(errors)))
         else:
             results.append((0, True, rule_title, "Numaralı alt başlık sıralaması uygun."))
+
 
 
     # ======================================================
@@ -11452,36 +12076,46 @@ def run_check(doc, paragraphs, check, rules_data):
             return results
 
         pattern = re.compile(r"şek(il)?\.?\s*(\d+)(?:\.(\d+))?", re.IGNORECASE)
-        parsed_figs = []  # [(satır, text, main_no, sub_no, full_no)]
+
+        # parsed_figs: [(satır, text, main_no, sub_no, full_key)]
+        # NOT: float kullanımı (3.10 -> 3.1) hatasına yol açtığı için full_key tuple tutulur.
+        parsed_figs = []
 
         for i, text in figure_captions:
             m = pattern.search(text)
             if not m:
                 continue
-            main_no = int(m.group(2))
-            sub_no = int(m.group(3)) if m.group(3) else 0
-            full_no = float(f"{main_no}.{sub_no}") if sub_no else float(main_no)
-            parsed_figs.append((i + 1, text, main_no, sub_no, full_no))
+
+            main_no = int(m.group(2))                    # Bölüm numarası (ör. 3)
+            sub_no  = int(m.group(3)) if m.group(3) else 0  # Alt numara (ör. 10); yoksa 0
+
+            # >>> DÜZELTME: float YOK! (3.10 -> 3.1 hatası burada oluşuyordu)
+            # full_key, "tam numarayı" kayıpsız temsil eder.
+            full_key = (main_no, sub_no)
+
+            parsed_figs.append((i + 1, text, main_no, sub_no, full_key))
 
         section_figs = defaultdict(list)
-        for idx, text, main, sub, full in parsed_figs:
-            section_figs[main].append((idx, text, sub, full))
+        for idx, text, main, sub, full_key in parsed_figs:
+            # main sabit bölüm/grup anahtarı; listede sub ve full_key saklanır
+            section_figs[main].append((idx, text, sub, full_key))
 
         # --- Mükerrer ve sıra atlama kontrolü ---
         for main_no, figs in section_figs.items():
-            figs_sorted = sorted(figs, key=lambda x: x[3])
-            seen = set()
+            # >>> DÜZELTME: sıralamayı tuple/float ile değil, alt numara (sub) ile yap
+            figs_sorted = sorted(figs, key=lambda x: x[2])  # x[2] = sub
+            seen = set()  # >>> DÜZELTME: full_key (tuple) veya sub ile mükerrer kontrolü
 
-            for j, (idx, text, sub, full_no) in enumerate(figs_sorted):
+            for j, (idx, text, sub, full_key) in enumerate(figs_sorted):
                 label = f"Şekil {main_no}.{sub}"
                 preview = text[:20].replace("\n", " ") + ("..." if len(text) > 20 else "")
 
-                # Mükerrer kontrolü
-                if full_no in seen:
+                # Mükerrer kontrolü (kayıpsız anahtar ile)
+                if full_key in seen:
                     errors.append(f"{idx}. satır ({preview}): {label} numarası mükerrer.")
-                seen.add(full_no)
+                seen.add(full_key)
 
-                # Sıra kontrolü
+                # Sıra kontrolü (bir önceki sub + 1 olmalı)
                 if j > 0:
                     prev_sub = figs_sorted[j - 1][2]
                     if sub != prev_sub + 1:
@@ -11495,6 +12129,8 @@ def run_check(doc, paragraphs, check, rules_data):
             results.append((0, False, rule_title, "; ".join(errors)))
         else:
             results.append((0, True, rule_title, "Tüm şekil numaraları sıralı ve benzersiz."))
+
+
 
     # ======================================================
     # ÇİZELGE BAŞLIKLARI TESPİTİ ve BİÇİMSEL KONTROLÜ (Tez metni içinde) - GÜNCEL + ATIF FİLTRELİ
@@ -12703,343 +13339,550 @@ def wrap_text(text, font_name, font_size, max_width):
 
 
 
-def create_report(report_config, results_by_section, docx_filename, rules_filename, student_name=None,app_version_text=None):
+def create_report(report_config, results_by_section, docx_filename, rules_filename, student_name=None, app_version_text=None):
     """
-    Kontrol sonuçlarını doğrudan PDF raporu olarak üretir.
-    Türkçe karakter desteği için init_turkish_pdf_fonts() ile kayıtlı TTF fontlarını kullanır.
-    Bölüm sonuçlarını çizgili tablo halinde sunar; E/H dar, Açıklama geniş ve satır kaydırmalı.
-
-    ✅ Bu sürümde:
-    - Evet sütununda "E" varsa: YEŞİL tik çizilir
-    - Hayır sütununda "H" varsa: KIRMIZI tik çizilir
-    - Tikler karakter değil, çizim olduğu için "boş kare" problemi biter
+    🎨 MODERN 2026 PDF RAPOR OLUŞTURUCU
+    =====================================
+    Kontrol sonuçlarını profesyonel, modern ve estetik bir PDF raporu olarak üretir.
+    
+    Özellikler:
+    - Gradient başlıklı kapak sayfası
+    - Öğrenci adı ve tez başlığı tezden alınır
+    - İstatistik özet sayfası
+    - Modern tablo tasarımı (zebra striping, yuvarlak köşeli uyarılar)
+    - Kurumsal renk paleti (2026 estetiki)
     """
-
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-
+    
     global memo
+    if 'memo' not in globals() or memo is None:
+        memo = {}
     if not student_name:
-        student_name = memo.get("student_name", "OGRENCI_ADI")
-
-    student_name = student_name.strip().upper().replace(" ", "_")
-    pdf_filename = f"RAPOR_{student_name}_{timestamp}.pdf"
-
-    # Türkçe fontları başlat (Arial'ı kaydeder; sorun olursa Helvetica'ya döner)
+        student_name = memo.get("student_name", "ÖĞRENCİ")
+    
+    student_name_display = (memo.get("student_name") or student_name or "Bilinmiyor").strip()
+    student_name_file = student_name.strip().upper().replace(" ", "_")
+    pdf_filename = f"RAPOR_{student_name_file}_{timestamp}.pdf"
+    
+    # Türkçe fontları başlat
     normal_font, bold_font = init_turkish_pdf_fonts()
-
-    # Raporlar klasörü (script'in bulunduğu dizine göre)
+    
+    # Raporlar klasörü
     base_dir = os.path.dirname(os.path.abspath(__file__))
     reports_dir = os.path.join(base_dir, "Raporlar")
     os.makedirs(reports_dir, exist_ok=True)
-
-    # PDF tam yolu
     pdf_path = os.path.join(reports_dir, pdf_filename)
-
+    
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
-    y = height - 2 * cm  # sayfanın üstünden başlaması
-
-    # ------------------------------------------------------------
-    # ✅ TİK ÇİZME FONKSİYONU (DOĞRU YER: create_report içinde, ama tablo çiziminin DIŞINDA)
-    # ------------------------------------------------------------
-    def draw_tick(c, cx, cy, size_pt=8, rgb=(0, 0.6, 0)):
-        """
-        cx, cy: hücre merkez noktası (PDF koordinatı)
-        size_pt: tik büyüklüğü
-        rgb: (r,g,b) 0-1 arası
-        """
-        c.saveState()
-        c.setStrokeColorRGB(*rgb)
-        c.setLineWidth(1.6)
-
-        # Basit tik: 3 parça çizgi
-        s = size_pt
-        x1, y1 = cx - 0.6 * s, cy - 0.1 * s
-        x2, y2 = cx - 0.2 * s, cy - 0.5 * s
-        x3, y3 = cx + 0.7 * s, cy + 0.6 * s
-
-        c.line(x1, y1, x2, y2)
-        c.line(x2, y2, x3, y3)
-        c.restoreState()
-
-    def draw_cross(c, cx, cy, size_pt=8, rgb=(0.85, 0, 0)):
-        """
-        cx, cy: hücre merkez noktası
-        size_pt: çarpı büyüklüğü
-        rgb: (r,g,b) 0-1 arası
-        """
-        c.saveState()
-        c.setStrokeColorRGB(*rgb)
-        c.setLineWidth(1.8)
-
-        s = size_pt
-        # X işaretini 2 çizgi ile çiziyoruz
-        c.line(cx - 0.6*s, cy - 0.6*s, cx + 0.6*s, cy + 0.6*s)
-        c.line(cx - 0.6*s, cy + 0.6*s, cx + 0.6*s, cy - 0.6*s)
-
-        c.restoreState()
-
-
-    # ------------------------------------------------------------
-    # Başlıklar
-    # ------------------------------------------------------------
-    title_value = report_config["report"].get("title", "")
-    title_lines = title_value if isinstance(title_value, list) else title_value.split("\n")
-
-    c.setFont(bold_font, 14)
-    for line in title_lines:
-        c.drawCentredString(width / 2, y, str(line))
-        y -= 0.8 * cm
-
-    y -= 0.5 * cm
-
-    # Meta Bilgiler
-    c.setFont(normal_font, 10)
-    c.drawString(2 * cm, y, f"Tez Dosyası: {docx_filename}")
-    y -= 0.5 * cm
-
-    student_name_real = (memo.get("student_name") or "").strip()
-    thesis_title = (memo.get("thesis_title") or "").strip()
-
-    if student_name_real:
-        c.drawString(2 * cm, y, f"Öğrenci Adı: {student_name_real}")
-        y -= 0.5 * cm
-
-
     
-    if thesis_title:
-        # ---- Tez Başlığı: uzun ise satır kaydır ----
-        label = "Tez Başlığı: "
-        x0 = 2 * cm
+    # ════════════════════════════════════════════════════════════════
+    # 🎨 MODERN RENK PALETİ (2026 ESTETİĞİ)
+    # ════════════════════════════════════════════════════════════════
+    COLORS = {
+        'primary_dark': (0.05, 0.15, 0.30),      # Koyu Lacivert
+        'primary': (0.08, 0.24, 0.45),            # Lacivert
+        'primary_light': (0.12, 0.35, 0.55),      # Açık Lacivert
+        'accent': (0.70, 0.12, 0.15),             # Kurumsal Bordo
+        'accent_light': (0.85, 0.20, 0.22),       # Açık Bordo
+        'success': (0.10, 0.58, 0.38),            # Yeşil
+        'success_bg': (0.92, 0.98, 0.94),         # Açık Yeşil BG
+        'warning': (0.92, 0.60, 0.15),            # Turuncu
+        'warning_bg': (1.0, 0.96, 0.88),          # Açık Turuncu BG
+        'danger': (0.82, 0.15, 0.18),             # Kırmızı
+        'danger_bg': (1.0, 0.94, 0.94),           # Açık Kırmızı BG
+        'text_dark': (0.12, 0.14, 0.18),          # Koyu Metin
+        'text_medium': (0.35, 0.38, 0.42),        # Orta Metin
+        'text_light': (0.55, 0.58, 0.62),         # Açık Metin
+        'bg_light': (0.97, 0.98, 0.99),           # Açık Arka Plan
+        'bg_card': (1.0, 1.0, 1.0),               # Kart Arka Plan
+        'border_light': (0.88, 0.90, 0.92),       # Açık Kenarlık
+        'gold': (0.85, 0.68, 0.22),               # Altın
+        'divider' : (0.55, 0.57, 0.60),
+        # OKÜ kurumsal kırmızı
+        'oku_red_dark': (0.40, 0.08, 0.08),   # #661414 (daha koyu, üst kısım için)
+        'oku_red':      (0.545, 0.118, 0.118),# #8B1E1E (ana kırmızı)
+        'oku_red_light':(0.639, 0.149, 0.149) # #A32626 (alt kısım için daha açık)
 
-        # Sayfada yazı için kullanılabilir genişlik (sol 2cm, sağ 2cm boşluk)
-        max_w = width - 4 * cm
-
-        # 10 punto ile yazdırıyorsun (Meta Bilgiler zaten 10)
-        font_name = normal_font
-        font_size = 10
-        c.setFont(font_name, font_size)
-
-        # wrap: "Tez Başlığı: ..." tamamını genişliğe göre böl
-        full = f"{label}{thesis_title}"
-        lines = wrap_text(full, font_name, font_size, max_w)
-
-        # satırları bas
-        line_step = 0.5 * cm
-        for ln in lines:
-            c.drawString(x0, y, ln)
-            y -= line_step
-
-
-    c.drawString(2 * cm, y, f"Oluşturma Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    y -= 0.6 * cm
-
-
-    # ✅ YENİ: uygulama sürümü
-    if app_version_text:
-        c.drawString(2*cm, y, f"Uygulama Sürümü: {app_version_text}")
-        y -= 0.7*cm
-
-
+    }
+    
+    # ════════════════════════════════════════════════════════════════
+    # 🛠️ YARDIMCI FONKSİYONLAR
+    # ════════════════════════════════════════════════════════════════
+    
+    def draw_gradient_rect(c, x, y, w, h, color1, color2, steps=50):
+        """Dikey gradient dikdörtgen çizer"""
+        step_h = h / steps
+        for i in range(steps):
+            r = color1[0] + (color2[0] - color1[0]) * i / steps
+            g = color1[1] + (color2[1] - color1[1]) * i / steps
+            b = color1[2] + (color2[2] - color1[2]) * i / steps
+            c.setFillColorRGB(r, g, b)
+            c.rect(x, y + h - (i + 1) * step_h, w, step_h + 0.5, fill=1, stroke=0)
+    
+    def draw_rounded_card(c, x, y, w, h, radius=8, fill_color=None, stroke_color=None, shadow=True):
+        """Gölgeli yuvarlak köşeli kart çizer"""
+        c.saveState()
+        if shadow:
+            # Gölge
+            c.setFillColorRGB(0.85, 0.85, 0.88)
+            c.roundRect(x + 2, y - 2, w, h, radius, fill=1, stroke=0)
+        if fill_color:
+            c.setFillColorRGB(*fill_color)
+        if stroke_color:
+            c.setStrokeColorRGB(*stroke_color)
+            c.setLineWidth(0.5)
+        c.roundRect(x, y, w, h, radius, fill=1 if fill_color else 0, stroke=1 if stroke_color else 0)
+        c.restoreState()
+    
+    def draw_stat_card(c, x, y, w, h, value, label, icon, color):
+        """Modern istatistik kartı çizer - düzeltilmiş layout"""
+        c.saveState()
+        # Kart arka planı
+        draw_rounded_card(c, x, y, w, h, radius=10, fill_color=COLORS['bg_card'], stroke_color=COLORS['border_light'], shadow=True)
+        
+        # Sol renkli şerit
+        c.setFillColorRGB(*color)
+        c.roundRect(x, y, 5, h, 2, fill=1, stroke=0)
+        
+        # Değer (büyük, üstte)
+        c.setFont(bold_font, 24)
+        c.setFillColorRGB(*COLORS['text_dark'])
+        c.drawString(x + 15, y + h - 30, str(value))
+        
+        # Etiket (küçük, altta)
+        c.setFont(normal_font, 9)
+        c.setFillColorRGB(*COLORS['text_medium'])
+        c.drawString(x + 15, y + 8, label)
+        c.restoreState()
+    
+    def draw_modern_doughnut(c, cx, cy, radius, percentage):
+        """Modern doughnut chart çizer"""
+        c.saveState()
+        
+        # Renk seçimi
+        if percentage >= 90:
+            main_color = COLORS['success']
+        elif percentage >= 70:
+            main_color = COLORS['warning']
+        else:
+            main_color = COLORS['danger']
+        
+        # Arka plan dairesi
+        c.setLineWidth(14)
+        c.setStrokeColorRGB(0.92, 0.93, 0.95)
+        c.setLineCap(1)
+        c.arc(cx - radius, cy - radius, cx + radius, cy + radius, 0, 360)
+        
+        # Değer dairesi
+        c.setStrokeColorRGB(*main_color)
+        angle = (percentage / 100.0) * 360
+        c.arc(cx - radius, cy - radius, cx + radius, cy + radius, 90, -angle)
+        
+        # Merkez daire (beyaz)
+        c.setFillColorRGB(1, 1, 1)
+        c.circle(cx, cy, radius - 12, fill=1, stroke=0)
+        
+        # Merkez yazı
+        c.setFont(bold_font, 32)
+        c.setFillColorRGB(*COLORS['text_dark'])
+        c.drawCentredString(cx, cy + 5, f"%{percentage:.1f}")
+        
+        c.setFont(normal_font, 11)
+        c.setFillColorRGB(*COLORS['text_medium'])
+        c.drawCentredString(cx, cy - 15, "UYUM ORANI")
+        c.restoreState()
+    
+    def draw_progress_bar(c, x, y, w, h, percentage, color):
+        """Modern ilerleme çubuğu çizer"""
+        c.saveState()
+        # Arka plan
+        c.setFillColorRGB(0.92, 0.93, 0.95)
+        c.roundRect(x, y, w, h, h/2, fill=1, stroke=0)
+        # Değer
+        fill_w = w * (percentage / 100.0)
+        if fill_w > h:
+            c.setFillColorRGB(*color)
+            c.roundRect(x, y, fill_w, h, h/2, fill=1, stroke=0)
+        c.restoreState()
+    
+    def draw_tick(c, cx, cy, size_pt=8, rgb=(0, 0.6, 0)):
+        """Yeşil tik işareti çizer"""
+        c.saveState()
+        c.setFillColorRGB(0.92, 0.98, 0.94)
+        c.setStrokeColorRGB(*rgb)
+        c.setLineWidth(0.5)
+        c.circle(cx, cy, size_pt * 1.1, fill=1, stroke=1)
+        c.setStrokeColorRGB(*rgb)
+        c.setLineWidth(1.5)
+        s = size_pt
+        c.line(cx - 0.5*s, cy, cx - 0.1*s, cy - 0.35*s)
+        c.line(cx - 0.1*s, cy - 0.35*s, cx + 0.55*s, cy + 0.45*s)
+        c.restoreState()
+    
+    def draw_cross(c, cx, cy, size_pt=8, rgb=(0.82, 0.15, 0.18)):
+        """Kırmızı çarpı işareti çizer"""
+        c.saveState()
+        c.setFillColorRGB(1.0, 0.94, 0.94)
+        c.setStrokeColorRGB(*rgb)
+        c.setLineWidth(0.5)
+        c.circle(cx, cy, size_pt * 1.1, fill=1, stroke=1)
+        c.setStrokeColorRGB(*rgb)
+        c.setLineWidth(1.5)
+        s = size_pt
+        c.line(cx - 0.4*s, cy - 0.4*s, cx + 0.4*s, cy + 0.4*s)
+        c.line(cx - 0.4*s, cy + 0.4*s, cx + 0.4*s, cy - 0.4*s)
+        c.restoreState()
+    
+    def draw_watermark(c):
+        """Filigran çizer"""
+        logo_path = os.path.join(base_dir, "static", "logo.png")
+        if os.path.exists(logo_path):
+            c.saveState()
+            c.setFillAlpha(0.06)
+            w_w = 16 * cm
+            w_h = 16 * cm
+            c.drawImage(logo_path, (width - w_w) / 2, (height - w_h) / 2,
+                        width=w_w, height=w_h, mask='auto', preserveAspectRatio=True)
+            c.restoreState()
+    
+    def draw_page_footer(c, page_num):
+        """Sayfa altbilgisi çizer"""
+        c.saveState()
+        # Alt çizgi
+        c.setStrokeColorRGB(*COLORS['border_light'])
+        c.setLineWidth(0.5)
+        c.line(2*cm, 1.8*cm, width - 2*cm, 1.8*cm)
+        
+        # Sol: Tarih
+        c.setFont(normal_font, 8)
+        c.setFillColorRGB(*COLORS['text_light'])
+        c.drawString(2*cm, 1.2*cm, f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+        
+        # Orta: Kurum
+        c.drawCentredString(width/2 + 2*cm, 1.2*cm, "Osmaniye Korkut Ata Üniversitesi - Lisansüstü Eğitim Enstitüsü")
+        
+        # Sağ: Sayfa no
+        c.drawRightString(width - 2*cm, 1.2*cm, f"Sayfa {page_num}")
+        c.restoreState()
+    
     # ============================================================
-    # GENEL BAŞARI ÖZETİ (tüm tez için)
-    # ============================================================
-    # Tüm bölümleri gezip toplamları hesapla
+    # 📊 İSTATİSTİK HESAPLAMALARI
+    # ════════════════════════════════════════════════════════════════
+    
     total_checked = 0
     total_ok = 0
     total_fail = 0
-
+    
     table_cols_global = report_config["report"].get("table_columns", [])
-
+    
     def _find_col_idx(cols, candidates):
         cols_lower = [str(c).strip().lower() for c in cols]
         for cand in candidates:
-            cand_l = cand.lower()
-            if cand_l in cols_lower:
-                return cols_lower.index(cand_l)
+            if cand.lower() in cols_lower:
+                return cols_lower.index(cand.lower())
         return None
-
+    
     e_idx_global = _find_col_idx(table_cols_global, ["Evet", "E", "Yes"])
     h_idx_global = _find_col_idx(table_cols_global, ["Hayır", "Hayir", "H", "No"])
-
+    
+    # Tüm kurallar üzerinden unweighted toplamlar (Stat Kartları için)
     for sk in report_config["report"].get("section_order", report_config["report"].get("order", [])):
         sec = results_by_section.get(sk, [])
         for res in sec:
             row = list(res)
             total_checked += 1
-
-            # EVET say
             if e_idx_global is not None and e_idx_global < len(row):
                 v = row[e_idx_global]
                 s = str(v).strip()
                 if s in ("✔", "✓", "E", "EVET", "True", "1") or (isinstance(v, bool) and v is True):
                     total_ok += 1
-
-            # HAYIR say
             if h_idx_global is not None and h_idx_global < len(row):
                 v = row[h_idx_global]
                 s = str(v).strip()
                 if s in ("✘", "✗", "H", "HAYIR", "False", "0") or (isinstance(v, bool) and v is False):
                     total_fail += 1
-
-    # ============================================================
-    # ✅ AĞIRLIKLI GENEL BAŞARI HESABI (index.html ile aynı)
-    # Ön Sayfalar %15 + Tez Metni %80 + Arka Sayfalar %5
-    # Not: abstract_tr ön sayfalara DAHİL
-    # ============================================================
-
+    
+    # ✅ AĞIRLIKLI GENEL BAŞARI HESABI (Yenikontrol.py logic)
     # 1) Rapor sırası: report.yaml'deki section_order (yoksa order)
     order = report_config["report"].get("section_order", report_config["report"].get("order", []))
-
-    # 2) Ön/arka grup tanımları (index.html mantığıyla birebir)
+    
+    # 2) Ön/arka grup tanımları
     front_keys = {
-        "general",
-        "inner_cover",
-        "approval",
-        "ethics",
-        "abstract_tr",          # ✅ özellikle dahil
-        "abstract_en",
-        "acknowledgements",
-        "toc",
-        "list_of_tables",
-        "list_of_figures",
-        "symbols_abbreviations",
+        "general", "inner_cover", "approval", "ethics", 
+        "abstract_tr", "abstract_en", "acknowledgements", 
+        "toc", "list_of_tables", "list_of_figures", "symbols_abbreviations"
     }
-
     back_keys = {"references", "appendices", "cv"}
-
-    # 3) Tez metni (body): order içinde olup front/back olmayan her şey
+    
+    # 3) Tez metni (body)
     body_keys = [k for k in order if (k not in front_keys and k not in back_keys)]
-
+    
     # 4) Bir grubun yüzde hesabı: o gruptaki tüm kurallar içinde OK oranı
     def _group_pct(keys):
-        # keys: set veya list olabilir; burada her ikisini destekliyoruz
-        group_total = 0   # gruptaki toplam kontrol satırı sayısı
-        group_ok = 0      # gruptaki toplam "Evet" sayısı
-
+        group_total = 0
+        group_ok = 0
         for sk in keys:
-            sec = results_by_section.get(sk, []) or []  # bölüm satırları
+            sec = results_by_section.get(sk, []) or []
             for res in sec:
-                row = list(res)                         # satırı listeye çevir
-
-                group_total += 1                         # her satır bir kontrol
-
-                # Evet sütunu index'i bulunduysa ve değer "E"/"✔"/True ise OK say
+                row = list(res)
+                group_total += 1
                 if e_idx_global is not None and e_idx_global < len(row):
                     v = row[e_idx_global]
                     s = str(v).strip()
                     if s in ("✔", "✓", "E", "EVET", "True", "1") or (isinstance(v, bool) and v is True):
                         group_ok += 1
-
-        # Bölümde hiç kural yoksa %0 dön (bölme hatasını önler)
         return (group_ok / group_total * 100.0) if group_total > 0 else 0.0
-
+    
     # 5) Grup yüzdelerini hesapla
-    front_pct = _group_pct(front_keys)    # Ön sayfalar başarı %
-    body_pct  = _group_pct(body_keys)     # Tez metni başarı %
-    back_pct  = _group_pct(back_keys)     # Arka sayfalar başarı %
+    front_pct = _group_pct(front_keys)
+    body_pct = _group_pct(body_keys)
+    back_pct = _group_pct(back_keys)
+    
+    # 6) AĞIRLIKLI genel yüzde
+    success_pct = 0.15 * front_pct + 0.80 * body_pct + 0.05 * back_pct
 
-    # 6) Ağırlıklı genel yüzde (asıl amaç)
-    success_pct_weighted = 0.15 * front_pct + 0.80 * body_pct + 0.05 * back_pct
-
-    # ✅ PDF'te gösterilecek genel yüzdeyi artık ağırlıklı hesapla
-    success_pct = success_pct_weighted
-
-
-    # Üstte görülecek özet satırları (2 satır)
-    # 1) Ağırlıklı genel yüzde (success_pct zaten ağırlıklı hesaplanıyor dediğin için aynı kalıyor)
-    overall_line1 = (
-        f"Genel Uyum (Ağırlıklı): %{success_pct:.1f}  "
-
-    )
-
-    # 2) Alt kırılım: Ön / Metin / Arka yüzdeleri
-    # Not: front_pct, body_pct, back_pct değişkenleri sende zaten hesaplanıyorsa direkt kullan.
-    overall_line2 = (
-        f"Ön Sayfalar: %{front_pct:.1f} | Tez Metni: %{body_pct:.1f} | Arka Sayfalar: %{back_pct:.1f}"
-    )
-
-
-    # ============================================================
-    # YÜZDEYE GÖRE RENK SEÇİMİ
-    # ============================================================
-    if success_pct >= 90:
-        c.setFillColorRGB(0, 0.6, 0)        # YEŞİL
-        bar_rgb = (0, 0.6, 0)        # yeşil
-    elif success_pct >= 70:
-        c.setFillColorRGB(1.0, 0.55, 0.0)   # TURUNCU
-        bar_rgb = (1.0, 0.55, 0.0)   # turuncu
-    else:
-        c.setFillColorRGB(0.85, 0, 0)       # KIRMIZI
-        bar_rgb = (0.85, 0, 0)       # kırmızı
-
-    # --- Renkli başlık satırı ---
-    c.setFillColorRGB(*bar_rgb)
+    # ════════════════════════════════════════════════════════════════
+    # 📄 SAYFA 1: MODERN KAPAK SAYFASI (2026 ESTETİĞİ)
+    # ════════════════════════════════════════════════════════════════
+    
+    # Filigran
+    draw_watermark(c)
+    
+    # --- Gradient Header (Üst) ---
+    header_h = 3.2 * cm
+    draw_gradient_rect(c, 0, height - header_h, width, header_h, 
+                       COLORS['oku_red_dark'], COLORS['oku_red'])
+    
+    # Altın şerit
+    c.saveState()
+    c.setFillColorRGB(*COLORS['divider'])
+    c.rect(0, height - header_h - 0.15*cm, width, 0.15*cm, fill=1, stroke=0)
+    c.restoreState()
+    
+    # Logo (Header içinde sol)
+    logo_path = os.path.join(base_dir, "static", "logo.png")
+    if os.path.exists(logo_path):
+        c.drawImage(logo_path, 1.8*cm, height - 2.8*cm, width=2.2*cm, height=2.2*cm, 
+                    mask='auto', preserveAspectRatio=True)
+    
+    # Kurum adı (Header içinde sağda)
+    c.saveState()
+    c.setFont(bold_font, 18)
+    c.setFillColorRGB(1, 1, 1)
+    c.drawString(4.5*cm, height - 1.8*cm, "OSMANİYE KORKUT ATA ÜNİVERSİTESİ")
+    c.setFont(normal_font, 12)
+    c.setFillColorRGB(0.85, 0.88, 0.92)
+    c.drawString(4.5*cm, height - 2.5*cm, "Lisansüstü Eğitim Enstitüsü")
+    c.restoreState()
+    
+    y = height - header_h - 1.5*cm
+    
+    # --- Ana Başlık Kartı (Merkezi, Gölgeli) ---
+    card_w = 15 * cm
+    card_h = 4.5 * cm
+    card_x = (width - card_w) / 2
+    card_y = y - card_h - 0.5*cm
+    
+    draw_rounded_card(c, card_x, card_y, card_w, card_h, radius=12, 
+                      fill_color=COLORS['bg_card'], stroke_color=COLORS['border_light'], shadow=True)
+    
+    # Üst dekoratif çizgi
+    c.saveState()
+    c.setFillColorRGB(*COLORS['accent'])
+    c.roundRect(card_x + 0.3*cm, card_y + card_h - 0.4*cm, card_w - 0.6*cm, 0.25*cm, 2, fill=1, stroke=0)
+    c.restoreState()
+    
+    # Ana Başlık
+    c.saveState()
+    c.setFont(bold_font, 26)
+    c.setFillColorRGB(*COLORS['primary'])
+    c.drawCentredString(width/2, card_y + card_h - 1.5*cm, "TEZ YAZIM KURALLARI")
+    
+    c.setFont(bold_font, 22)
+    c.setFillColorRGB(*COLORS['accent'])
+    c.drawCentredString(width/2, card_y + card_h - 2.3*cm, "KONTROL RAPORU")
+    c.restoreState()
+    
+    y = card_y - 1.2*cm
+    
+    # --- Öğrenci Bilgi Kartı ---
+    info_card_w = 15 * cm
+    info_card_h = 4.6 * cm
+    info_card_x = (width - info_card_w) / 2
+    info_card_y = y - info_card_h
+    
+    draw_rounded_card(c, info_card_x, info_card_y, info_card_w, info_card_h, radius=10,
+                      fill_color=COLORS['bg_light'], stroke_color=COLORS['border_light'], shadow=False)
+    
+    # Sol: Etiketler ve değerler
+    c.saveState()
     c.setFont(bold_font, 11)
+    c.setFillColorRGB(*COLORS['primary'])
+    c.drawString(info_card_x + 0.8*cm, info_card_y + info_card_h - 1.0*cm, "ÖĞRENCİ:")
+    
+    c.setFont(bold_font, 14)
+    c.setFillColorRGB(*COLORS['text_dark'])
+    c.drawString(info_card_x + 3.5*cm, info_card_y + info_card_h - 1.0*cm, student_name_display)
+    
+    # TEZ BAŞLIĞI etiketi
+    thesis_title = (memo.get("thesis_title") or "Tez Başlığı Belirlenemedi").strip()
+    
+    
+    
+        # --- TEZ BAŞLIĞI: Etiket + dinamik genişlik + dinamik satır sayısı ---
 
-        # --- Renkli başlık satırı ---
-    c.setFillColorRGB(*bar_rgb)
+    # Etiket konumu
+    label_x = info_card_x + 0.8*cm
+    label_y = info_card_y + info_card_h - 2.0*cm
 
-    # 1. satır: kalın (bold)
+    # Etiket
     c.setFont(bold_font, 11)
-    c.drawString(2 * cm, y, overall_line1)
+    c.setFillColorRGB(*COLORS['primary'])
+    label_txt = "TEZ BAŞLIĞI:"
+    c.drawString(label_x, label_y, label_txt)
 
-    # 2. satır: normal font, biraz daha küçük (taşmayı azaltır)
-    y_line2 = y - 0.45 * cm
-    c.setFont(normal_font, 9)
-    c.drawString(2 * cm, y_line2, overall_line2)
+    # Etiket genişliğine göre metnin başlayacağı x (dinamik)
+    label_w = pdfmetrics.stringWidth(label_txt, bold_font, 11)
+    gap = 0.35 * cm
+    value_x = label_x + label_w + gap
 
+    # Başlık metni için kullanılabilir genişlik (sağdan 0.8cm pay bırak)
+    max_w = (info_card_x + info_card_w - 0.8*cm) - value_x
+    if max_w < 2*cm:   # emniyet (çok dar olursa)
+        max_w = 2*cm
 
-    # --- İnce progress bar (satırın hemen altına) ---
-    # Bar ölçüleri
-    bar_x = 2 * cm
-    bar_w = width - 4 * cm          # sayfa kenarlarından 2'şer cm boşluk
-    bar_h = 0.18 * cm               # ince bar
-    bar_y = y_line2 - 0.45 * cm           # yazının altına biraz boşluk
-
-    # Çerçeve (ince)
-    c.setStrokeColorRGB(0, 0, 0)
-    c.setLineWidth(0.6)
-    c.rect(bar_x, bar_y, bar_w, bar_h, stroke=1, fill=0)
-
-    # Dolgu (yüzdeye göre)
-    fill_w = bar_w * max(0.0, min(1.0, success_pct / 100.0))
-    c.setFillColorRGB(*bar_rgb)
-    c.setStrokeColorRGB(*bar_rgb)
-    c.rect(bar_x, bar_y, fill_w, bar_h, stroke=0, fill=1)
-
-    # Y pozisyonunu ilerlet (2 satır + bar + boşluk)
-    y = bar_y - 0.65 * cm
-
-
-
-    #c.setFont(bold_font, 11)
-    #c.drawString(2 * cm, y, overall_text)
-    #y -= 0.9 * cm
-
-    # Sonraki metinler için normale dön
+    # Metni wrap et
     c.setFont(normal_font, 10)
-    c.setFillColorRGB(0, 0, 0)
-    c.setStrokeColorRGB(0, 0, 0)
+    c.setFillColorRGB(*COLORS['text_dark'])
+    title_lines = wrap_text(thesis_title, normal_font, 10, max_w)
 
+    # Kaç satır sığar? (kartın altından güvenli pay bırakarak)
+    line_height = 0.45 * cm
+    title_top_y = label_y
+    title_bottom_y = info_card_y + 0.6*cm  # alt boşluk
+    max_title_height = title_top_y - title_bottom_y
+    max_lines = max(1, int(max_title_height // line_height))
+
+    # Eğer çok satır varsa, karta sığdığı kadar yaz + sonuna … koy
+    visible_lines = title_lines[:max_lines]
+    if len(title_lines) > max_lines and visible_lines:
+        visible_lines[-1] = (visible_lines[-1].rstrip() + "…")
+
+    # Çiz
+    ty = label_y
+    for i, ln in enumerate(visible_lines):
+        c.drawString(value_x, ty - i*line_height, ln)
+
+    
+    
+
+        
+    c.restoreState()
+    
+    y = info_card_y - 1.5*cm
+    
+    # --- Dashboard Alanı (Doughnut + İstatistikler) ---
+    
+    # Doughnut Chart (Sol)
+    doughnut_cx = 5.5 * cm
+    doughnut_cy = y - 3 * cm
+    draw_modern_doughnut(c, doughnut_cx, doughnut_cy, 2.5*cm, success_pct)
+    
+
+    # Sağ: Bölüm performans çubukları (stat kartlar kalktı → alanı dolduralım)
+    stat_y = y - 0.5*cm
+    bar_x = 9.2 * cm          # daha sola al
+    bar_w = 9.0 * cm          # genişlet (sağa kadar güzel doldurur)
+    bar_h = 0.5 * cm
+
+    c.saveState()
+    c.setFont(normal_font, 9)
+    c.setFillColorRGB(*COLORS['text_medium'])
+
+    # Ön Bölüm
+    c.drawString(bar_x, stat_y - 0.8*cm, f"Ön Bölüm: %{front_pct:.0f}")
+    draw_progress_bar(c, bar_x, stat_y - 1.45*cm, bar_w, bar_h, front_pct,
+                    COLORS['success'] if front_pct >= 70 else COLORS['danger'])
+
+    # Ana Metin
+    c.drawString(bar_x, stat_y - 2.3*cm, f"Ana Metin: %{body_pct:.0f}")
+    draw_progress_bar(c, bar_x, stat_y - 2.95*cm, bar_w, bar_h, body_pct,
+                    COLORS['success'] if body_pct >= 70 else COLORS['danger'])
+
+    # Arka Bölüm
+    c.drawString(bar_x, stat_y - 3.8*cm, f"Arka Bölüm: %{back_pct:.0f}")
+    draw_progress_bar(c, bar_x, stat_y - 4.45*cm, bar_w, bar_h, back_pct,
+                    COLORS['success'] if back_pct >= 70 else COLORS['danger'])
+
+    c.restoreState()
+    
+    # Küçük özet (dikkat çekmeyen)
+    c.saveState()
+    c.setFont(normal_font, 8)
+    c.setFillColorRGB(*COLORS['text_light'])
+    c.drawString(bar_x, stat_y - 5.1*cm,
+                f"Toplam: {total_checked}  •  Uygun: {total_ok}  •  Uygunsuz: {total_fail}")
+    c.restoreState()
+
+
+    
+    # --- Alt bilgi kutusu ---
+    footer_box_y = 2.5 * cm
+    c.saveState()
+    c.setStrokeColorRGB(*COLORS['border_light'])
+    c.setLineWidth(0.5)
+    c.line(2*cm, footer_box_y + 1*cm, width - 2*cm, footer_box_y + 1*cm)
+    
+    c.setFont(normal_font, 9)
+    c.setFillColorRGB(*COLORS['text_light'])
+    footer_text = f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    if app_version_text:
+        footer_text += f"  •  Sürüm: {app_version_text}"
+    c.drawCentredString(width/2, footer_box_y + 0.3*cm, footer_text)
+    c.drawRightString(width - 2*cm, footer_box_y + 0.3*cm, "Sayfa 1")
+    c.restoreState()
+    
+    # ════════════════════════════════════════════════════════════════
+    # KAPAK SAYFASI BİTTİ
+    # ════════════════════════════════════════════════════════════════
+    # Not: Her bölüm kendi sayfasında başladığı için burada showPage yapmıyoruz
+    
+    page_num = 1  # Kapak sayfası = 1
 
     # ------------------------------------------------------------
-    # Her bölüm için TABLO olarak çıktı
+    # 3. DETAYLI SONUÇLAR (Bölüm tabloları)
     # ------------------------------------------------------------
     for section_key in report_config["report"].get(
         "section_order",
         report_config["report"].get("order", [])
     ):
+        # ════════════════════════════════════════════════════════════════
+        # ✅ Her bölüm yeni sayfada başlasın
+        # ════════════════════════════════════════════════════════════════
+        c.showPage()
+        page_num += 1
+        draw_watermark(c)
+        draw_page_footer(c, page_num)
+        y = height - 2 * cm
         # Bölüm etiketi
         label = report_config["report"].get(
             "section_labels",
             report_config["report"].get("section_titles", {})
         ).get(section_key, section_key.upper())
 
-        # Bölüm başlığı
-        c.setFont(bold_font, 11)
-        c.drawString(2 * cm, y, str(label))
-        y -= 0.6 * cm
+        # Bölüm başlığı (Modern stil)
+        c.saveState()
+        # Sol accent bar
+        c.setFillColorRGB(*COLORS['accent'])
+        c.roundRect(1.8*cm, y - 0.15*cm, 0.3*cm, 0.55*cm, 2, fill=1, stroke=0)
+        
+        c.setFont(bold_font, 12)
+        c.setFillColorRGB(*COLORS['primary'])
+        c.drawString(2.3*cm, y, str(label))
+        c.restoreState()
+        y -= 0.7 * cm
 
         section_results = results_by_section.get(section_key, [])
 
@@ -13089,21 +13932,35 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
             normalized_rows.append(row)
 
         total_rules = len(section_results)
-        
 
         # Bölüm uyum yüzdesi (Toplam kural üzerinden)
         section_pct = (ok_count / total_rules * 100.0) if total_rules > 0 else 0.0
+        
+        # Renk seçimi
+        if section_pct >= 90:
+            pct_color = COLORS['success']
+        elif section_pct >= 70:
+            pct_color = COLORS['warning']
+        else:
+            pct_color = COLORS['danger']
 
-        summary_text = (
-            f"(Bölüm Uyum Başarısı: %{section_pct:.1f}"
-            f", Toplam: {total_rules}, Uygun: {ok_count}, Uygunsuz: {fail_count} )"
-            
-        )
-
-
-        c.setFont(normal_font, 10)
-        c.drawString(2 * cm, y, summary_text)
-        y -= 0.4 * cm
+        # Özet satırı (modern stil)
+        c.saveState()
+        c.setFont(normal_font, 9)
+        c.setFillColorRGB(*COLORS['text_medium'])
+        c.drawString(2.3*cm, y, f"Toplam: {total_rules} kural  •  ")
+        
+        c.setFillColorRGB(*COLORS['success'])
+        c.drawString(5.8*cm, y, f"✓ {ok_count} uygun")
+        
+        c.setFillColorRGB(*COLORS['danger'])
+        c.drawString(8.3*cm, y, f"✗ {fail_count} uygunsuz")
+        
+        c.setFillColorRGB(*pct_color)
+        c.setFont(bold_font, 9)
+        c.drawString(11.3*cm, y, f"[%{section_pct:.0f} Uyum]")
+        c.restoreState()
+        y -= 0.45 * cm
 
         # ------------------------------------------------------------
         # --- TABLO ÇİZİMİ ---
@@ -13114,6 +13971,9 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
         base_line_height = 0.5 * cm
         if y < (2 * cm + min_rows_space * base_line_height):
             c.showPage()
+            page_num += 1
+            draw_watermark(c)
+            draw_page_footer(c, page_num)
             width, height = A4
             y = height - 2 * cm
             c.setFont(normal_font, 10)
@@ -13147,14 +14007,14 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
 
         col_count = max(1, len(table_cols))
 
-        # Kolon başlıklarına göre ağırlık ver (Evet/Hayır dar, Kural geniş)
+        # Kolon başlıklarına göre ağırlık ver (Evet/Hayır sabit genişlik, Kural geniş)
         weights = []
         for name in table_cols:
             name_lower = str(name or "").strip().lower()
-            if str(name) in ("No#", "Evet", "Hayır") or name_lower in ("no#", "evet", "hayır", "hayir"):
-                weights.append(0.5)
-            elif name_lower.startswith("no"):
-                weights.append(1.0)
+            if name_lower in ("evet", "hayır", "hayir", "e", "h"):
+                weights.append(1.2)  # ✅ Evet/Hayır için biraz daha geniş, sabit genişlik
+            elif str(name) in ("No#",) or name_lower.startswith("no"):
+                weights.append(0.8)
             elif "kural" in name_lower:
                 weights.append(7.0)  # Kural sütununu daha da genişlet
             else:
@@ -13166,31 +14026,31 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
         for w_ in col_widths:
             col_x.append(col_x[-1] + w_)
 
-        # 1) BAŞLIK SATIRI
-        header_height = base_line_height + 0.3 * cm
+        # 1) BAŞLIK SATIRI (Modern Gradient)
+        header_height = base_line_height + 0.35 * cm
         header_top_y = y
         header_bottom_y = y - header_height
 
-        c.setLineWidth(0.5)
-        c.line(left, header_top_y, right, header_top_y)
-        c.line(left, header_bottom_y, right, header_bottom_y)
-        for x in col_x:
-            c.line(x, header_top_y, x, header_bottom_y)
-
+        # Gradient header arka planı
+        draw_gradient_rect(c, left, header_bottom_y, right - left, header_height,
+                          COLORS['primary'], COLORS['primary_light'], steps=30)
+        
+        c.saveState()
         c.setFont(bold_font, 10)
-        header_text_y = header_bottom_y + 0.2 * cm
+        c.setFillColorRGB(1, 1, 1)  # Beyaz yazı
+        header_text_y = header_bottom_y + 0.28 * cm
         for i, col_name in enumerate(table_cols):
-            text_x = col_x[i] + 2
+            text_x = col_x[i] + 4
             c.drawString(text_x, header_text_y, str(col_name))
+        c.restoreState()
 
         y = header_bottom_y
 
         # 2) VERİ SATIRLARI
         data_font_size = 9
-        c.setFont(normal_font, data_font_size
-
-        )
-        for row_all in normalized_rows:
+        c.setFont(normal_font, data_font_size)
+        
+        for row_idx, row_all in enumerate(normalized_rows):
             # Ekranda gösterilecek satır (Açıklama sütunu çıkarılmış hali)
             row = [row_all[i] if i < len(row_all) else "" for i in display_col_indices]
 
@@ -13244,22 +14104,26 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
             # Sayfa sonu kontrolü
             if y - row_height < 2 * cm:
                 c.showPage()
+                page_num += 1
+                draw_watermark(c)
+                draw_page_footer(c, page_num)
                 width, height = A4
                 y = height - 2 * cm
 
+                # ✅ Gradient header ile tutarlı başlık çiz (sayfa bölünmesinde)
                 header_top_y = y
                 header_bottom_y = y - header_height
-                c.setLineWidth(0.5)
-                c.line(left, header_top_y, right, header_top_y)
-                c.line(left, header_bottom_y, right, header_bottom_y)
-                for x in col_x:
-                    c.line(x, header_top_y, x, header_bottom_y)
-
+                draw_gradient_rect(c, left, header_bottom_y, right - left, header_height,
+                                  COLORS['primary'], COLORS['primary_light'], steps=30)
+                
+                c.saveState()
                 c.setFont(bold_font, 10)
-                header_text_y = header_bottom_y + 0.2 * cm
+                c.setFillColorRGB(1, 1, 1)  # Beyaz yazı
+                header_text_y = header_bottom_y + 0.28 * cm
                 for i, col_name in enumerate(table_cols):
-                    text_x = col_x[i] + 2
+                    text_x = col_x[i] + 4
                     c.drawString(text_x, header_text_y, str(col_name))
+                c.restoreState()
 
                 y = header_bottom_y
                 c.setFont(normal_font, data_font_size)
@@ -13341,23 +14205,26 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
 
             if y - total_block_height < 2 * cm:
                 c.showPage()
+                page_num += 1
+                draw_watermark(c)
+                draw_page_footer(c, page_num)
                 width, height = A4
                 y = height - 2 * cm
 
-                # başlığı yeniden bas
+                # ✅ Gradient header ile tutarlı başlık çiz (sayfa bölünmesinde - açıklama bloğu)
                 header_top_y = y
                 header_bottom_y = y - header_height
-                c.setLineWidth(0.5)
-                c.line(left, header_top_y, right, header_top_y)
-                c.line(left, header_bottom_y, right, header_bottom_y)
-                for x in col_x:
-                    c.line(x, header_top_y, x, header_bottom_y)
-
+                draw_gradient_rect(c, left, header_bottom_y, right - left, header_height,
+                                  COLORS['primary'], COLORS['primary_light'], steps=30)
+                
+                c.saveState()
                 c.setFont(bold_font, 10)
-                header_text_y = header_bottom_y + 0.2 * cm
+                c.setFillColorRGB(1, 1, 1)  # Beyaz yazı
+                header_text_y = header_bottom_y + 0.28 * cm
                 for i, col_name in enumerate(table_cols):
-                    text_x = col_x[i] + 2
+                    text_x = col_x[i] + 4
                     c.drawString(text_x, header_text_y, str(col_name))
+                c.restoreState()
 
                 y = header_bottom_y
                 c.setFont(normal_font, data_font_size)
@@ -13367,12 +14234,24 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
                 row_bottom_y = y - row_height
 
             # ------------------------------------------------------------
-            # ✅ SATIR KUTULARI (Fail varsa No hücresi açıklamayı da kapsasın)
+            # ✅ SATIR ARKA PLANI (Zebra + Hata Boyama)
             # ------------------------------------------------------------
             block_top_y = row_top_y
             block_bottom_y = row_top_y - total_block_height
 
+            c.saveState()
+            if has_fail: 
+                c.setFillColorRGB(1.0, 0.94, 0.94) # Çok açık kırmızı (hata vurgusu)
+            elif row_idx % 2 == 1:
+                c.setFillColorRGB(0.98, 0.98, 0.98) # Çok açık gri (zebra)
+            else:
+                c.setFillColorRGB(1, 1, 1)
+            
+            c.rect(left, block_bottom_y, right - left, total_block_height, fill=1, stroke=0)
+            c.restoreState()
+
             c.setLineWidth(0.5)
+            c.setStrokeColorRGB(0.8, 0.8, 0.8) # Hafif gri çizgiler
 
             # Dış çerçeve (tüm blok)
             c.line(left, block_top_y, right, block_top_y)
@@ -13436,28 +14315,61 @@ def create_report(report_config, results_by_section, docx_filename, rules_filena
                         draw_cross(c, cx, cy, size_pt=9, rgb=(0.85, 0, 0))
                     continue
 
-                # Diğer kolonlar: metin bas
+                # Diğer kolonlar: metin bas - dikey ortalı
                 lines = cell_lines_list[i]
-                text_x = col_x[i] + 2
-                line_y = row_top_y - 0.3 * cm
+                text_x = col_x[i] + 4
+                # Dikey ortalama: toplam metin yüksekliğini hesapla ve ortala
+                total_text_height = len(lines) * base_line_height
+                text_start_y = ((row_top_y + row_bottom_y) / 2) + (total_text_height / 2) - 0.1 * cm
                 for line_idx, line_text in enumerate(lines):
-                    if line_idx > 0:
-                        line_y -= base_line_height
+                    line_y = text_start_y - (line_idx * base_line_height)
                     c.drawString(text_x, line_y, line_text)
 
             # ------------------------------------------------------------
-            # ✅ AÇIKLAMA SATIRI (sadece HAYIR ise)
+            # ✅ AÇIKLAMA SATIRI (sadece HAYIR ise) - UYARI KUTUSU STİLİ
             # ------------------------------------------------------------
             if has_exp:
+                # Önce eklenecek kutunun genişliğini belirleyelim
+                eb_x = col_x[1] + 0.2 * cm
+                eb_w = (right - 0.2 * cm) - eb_x
+                
+                # Metni bu genişliğe göre wrap et
+                wrapped_exp = []
+                # Çok uzun teknik ifadeleri kısaltabiliriz veya olduğu gibi wrap edebiliriz
+                # Örn: "144. satır (belge:144)..."
+                for el in exp_lines:
+                    # wrap_text(text, font_name, font_size, max_width)
+                    # max_width padding düşünülerek verilmeli (örn -15 pt)
+                    w_lines = wrap_text(el, normal_font, exp_font_size, eb_w - 15)
+                    wrapped_exp.extend(w_lines)
+                
+                exp_lines = wrapped_exp  # Güncellenmiş satırlar
+
+                # Kutu yüksekliğini metne göre tekrar netleştirelim
+                box_h = (len(exp_lines) * base_line_height) + 0.6 * cm
+                eb_y = row_bottom_y - box_h + 0.1 * cm
+                # eb_x ve eb_w yukarıda wrap işlemi için hesaplanmıştı
+                
+                c.saveState()
+                c.setLineWidth(0.6)
+                c.setStrokeColorRGB(1.0, 0.7, 0.7)
+                c.setFillColorRGB(1.0, 1.0, 0.98)
+                c.roundRect(eb_x, eb_y, eb_w, box_h, 3, fill=1, stroke=1)
+                
+                c.setFont(bold_font, 8)
+                c.setFillColorRGB(0.8, 0, 0)
+                c.drawString(eb_x + 0.3*cm, eb_y + box_h - 0.45*cm, "⚠ UYARI / AÇIKLAMA:")
+                
                 c.setFont(normal_font, exp_font_size)
-                tx = col_x[1] + 6  # açıklama metni x
-                #ty = exp_top_y - 0.3 * cm
-                ty = row_bottom_y - 0.25 * cm  # açıklama satırı başı
+                c.setFillColorRGB(0.2, 0.2, 0.2)
+                tx = eb_x + 0.6 * cm
+                ty = eb_y + box_h - 0.9*cm
                 for li, tline in enumerate(exp_lines):
-                    if li > 0:
-                        ty -= base_line_height
+                    # "Açıklama:" tekrarını önle
+                    if "Açıklama:" in tline: continue
                     c.drawString(tx, ty, tline)
-                c.setFont(normal_font, data_font_size)
+                    ty -= base_line_height
+                c.restoreState()
 
             # Blok bitti -> y’yi en alta al
             y = block_bottom_y
@@ -13532,7 +14444,7 @@ def process_document(docx_path, rules_data, report_data):
     if "memo" not in globals():  # 🔹 Eğer tanımlı değilse oluştur
         memo = {}
     
-    print(f"📂 Word belgesi açılıyor: {docx_path}")
+    print(f"[DOSYA] Word belgesi aciliyor: {docx_path}")
     doc = Document(docx_path)  # Word belgesini yükle
     all_paragraphs = doc.paragraphs  # Tüm paragrafları oku
 
@@ -13568,15 +14480,15 @@ def process_document(docx_path, rules_data, report_data):
     student_name = None      # 🔑 Öğrenci adını tutmak için değişken
     
 
-    print("✅ Belge açıldı, paragraf sayısı:", len(all_paragraphs))
+    print("[OK] Belge açıldı, paragraf sayısı:", len(all_paragraphs))
 
     # rules.yaml içindeki tüm bölümleri sırayla işle
     for section_key, section_data in rules_data.get("pages", {}).items():
         if not section_data.get("enabled", False):
-            print(f"⏩ {section_key} bölümü atlandı (enabled: false)")
+            print(f">> {section_key} bölümü atlandı (enabled: false)")
             continue
 
-        print(f"\n🔎 {section_key.upper()} bölümü kontrol ediliyor...")
+        print(f"\n[ANALIZ] {section_key.upper()} bölümü kontrol ediliyor...")
         section_results = []  # Bu bölümdeki kuralların sonuçları
 
         # O bölümdeki tüm kurallar
@@ -13672,20 +14584,20 @@ def main():
     # --------------------------------------------------------
     # 2. Kurallar ve rapor şablonunu yükle + kontrol + rapor
     # --------------------------------------------------------
-    logger.info("📥 Kurallar yükleniyor...")
-    logger.info("📑 Rapor hazırlanıyor...")
+    logger.info("[BILGI] Kurallar yükleniyor...")
+    logger.info("[BILGI] Rapor hazırlanıyor...")
 
     # run_check: yaml oku + belgeyi kontrol et + pdf raporu üret
     pdf_path, results_by_section, student_name = run_thesis_check(docx_file, rules_file, report_file)
 
-    logger.info("✅ Kurallar yüklendi")
+    logger.info("[OK] Kurallar yüklendi")
 
     # --------------------------------------------------------
     # 3. Süre / çıktı
     # --------------------------------------------------------
     duration = time.time() - start_time
-    logger.info(f"⏱ İşlem süresi: {duration:.2f} saniye")
-    logger.info(f"✅ Rapor oluşturuldu: {pdf_path}")
+    logger.info(f"[BILGI] İşlem süresi: {duration:.2f} saniye")
+    logger.info(f"[OK] Rapor oluşturuldu: {pdf_path}")
 
 
 if __name__ == "__main__":
