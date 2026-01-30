@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import Tez_Kontrol as tez
 
 # --- Hardcoded build info (single source of truth) ---
-APP_VERSION = "v1.0.11333"
+APP_VERSION = "v1.0.12"
 APP_SHA = ""          # istersen "local" yaz veya kısa bir şey
 BUILD_TIME = ""       # istersen "2026-01-30" gibi
 
